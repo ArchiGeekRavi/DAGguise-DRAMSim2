@@ -38,6 +38,7 @@
 #include "MemoryController.h"
 #include "MemorySystem.h"
 #include "AddressMapping.h"
+#include "IniReader.h"
 
 #define SEQUENTIAL(rank,bank) (rank*NUM_BANKS)+bank
 
@@ -81,6 +82,10 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 
 	//set here to avoid compile errors
 	currentClockCycle = 0;
+	currentDomain = 0;
+
+	currentPhase = -1;
+	remainingInPhase = 0;
 
 	//reserve memory for vectors
 	transactionQueue.reserve(TRANS_QUEUE_DEPTH);
@@ -127,7 +132,7 @@ void MemoryController::receiveFromBus(BusPacket *bpacket)
 	}
 
 	//add to return read data queue
-	returnTransaction.push_back(new Transaction(RETURN_DATA, bpacket->physicalAddress, bpacket->data));
+	returnTransaction.push_back(new Transaction(RETURN_DATA, bpacket->physicalAddress, bpacket->data, -1, -1, -1, false));
 	totalReadsPerBank[SEQUENTIAL(bpacket->rank,bpacket->bank)]++;
 
 	// this delete statement saves a mindboggling amount of memory
@@ -147,6 +152,21 @@ void MemoryController::returnReadData(const Transaction *trans)
 void MemoryController::attachRanks(vector<Rank *> *ranks)
 {
 	this->ranks = ranks;
+}
+
+//gives the memory controller a handle on the rank objects
+void MemoryController::initDefence()
+{
+	/* Create bookkeeping maps for convenience */
+	currentPhase = 0;
+	remainingInPhase = 0;
+
+	PRINT("Starting initial phase!");
+	for (auto& node : this->dag[to_string(currentPhase)]["node"].items()) {
+		PRINT("Scheduling node " << node.key() << "at time" << currentClockCycle + remainingInPhase);
+		schedule[currentClockCycle + remainingInPhase++] = stoi(node.key());
+	}
+
 }
 
 //memory controller update
@@ -489,83 +509,319 @@ void MemoryController::update()
 
 	}
 
-	for (size_t i=0;i<transactionQueue.size();i++)
-	{
-		//pop off top transaction from queue
-		//
-		//	assuming simple scheduling at the moment
-		//	will eventually add policies here
-		Transaction *transaction = transactionQueue[i];
-
-		//map address to rank,bank,row,col
-		unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
-
-		// pass these in as references so they get set by the addressMapping function
-		addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
-
-		//if we have room, break up the transaction into the appropriate commands
-		//and add them to the command queue
-		if (commandQueue.hasRoomFor(2, newTransactionRank, newTransactionBank))
+	if (protection == Regular || protection == FixedService_Channel) {
+		for (size_t i=0;i<transactionQueue.size();i++)
 		{
-			if (DEBUG_ADDR_MAP) 
+			//pop off top transaction from queue
+			//
+			//	assuming simple scheduling at the moment
+			//	will eventually add policies here
+			Transaction *transaction = transactionQueue[i];
+
+			//map address to rank,bank,row,col
+			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
+
+			// pass these in as references so they get set by the addressMapping function
+			addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
+
+			//if we have room, break up the transaction into the appropriate commands
+			//and add them to the command queue
+			if (commandQueue.hasRoomFor(2, newTransactionRank, newTransactionBank))
 			{
-				PRINTN("== New Transaction - Mapping Address [0x" << hex << transaction->address << dec << "]");
-				if (transaction->transactionType == DATA_READ) 
+				if (DEBUG_ADDR_MAP) 
 				{
-					PRINT(" (Read)");
+					PRINTN("== New Transaction - Mapping Address [0x" << hex << transaction->address << dec << "]");
+					if (transaction->transactionType == DATA_READ) 
+					{
+						PRINT(" (Read)");
+					}
+					else
+					{
+						PRINT(" (Write)");
+					}
+					PRINT("  Rank : " << newTransactionRank);
+					PRINT("  Bank : " << newTransactionBank);
+					PRINT("  Row  : " << newTransactionRow);
+					PRINT("  Col  : " << newTransactionColumn);
+				}
+
+
+
+				//now that we know there is room in the command queue, we can remove from the transaction queue
+				transactionQueue.erase(transactionQueue.begin()+i);
+
+				//create activate command to the row we just translated
+				BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
+						newTransactionColumn, newTransactionRow, newTransactionRank,
+						newTransactionBank, 0, dramsim_log);
+
+				//create read or write command and enqueue it
+				BusPacketType bpType = transaction->getBusPacketType();
+				BusPacket *command = new BusPacket(bpType, transaction->address,
+						newTransactionColumn, newTransactionRow, newTransactionRank,
+						newTransactionBank, transaction->data, dramsim_log);
+
+
+
+				commandQueue.enqueue(ACTcommand);
+				commandQueue.enqueue(command);
+
+				// If we have a read, save the transaction so when the data comes back
+				// in a bus packet, we can staple it back into a transaction and return it
+				if (transaction->transactionType == DATA_READ)
+				{
+					pendingReadTransactions.push_back(transaction);
 				}
 				else
 				{
-					PRINT(" (Write)");
+					// just delete the transaction now that it's a buspacket
+					delete transaction; 
 				}
-				PRINT("  Rank : " << newTransactionRank);
-				PRINT("  Bank : " << newTransactionBank);
-				PRINT("  Row  : " << newTransactionRow);
-				PRINT("  Col  : " << newTransactionColumn);
+				/* only allow one transaction to be scheduled per cycle -- this should
+				* be a reasonable assumption considering how much logic would be
+				* required to schedule multiple entries per cycle (parallel data
+				* lines, switching logic, decision logic)
+				*/
+				break;
 			}
-
-
-
-			//now that we know there is room in the command queue, we can remove from the transaction queue
-			transactionQueue.erase(transactionQueue.begin()+i);
-
-			//create activate command to the row we just translated
-			BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
-					newTransactionColumn, newTransactionRow, newTransactionRank,
-					newTransactionBank, 0, dramsim_log);
-
-			//create read or write command and enqueue it
-			BusPacketType bpType = transaction->getBusPacketType();
-			BusPacket *command = new BusPacket(bpType, transaction->address,
-					newTransactionColumn, newTransactionRow, newTransactionRank,
-					newTransactionBank, transaction->data, dramsim_log);
-
-
-
-			commandQueue.enqueue(ACTcommand);
-			commandQueue.enqueue(command);
-
-			// If we have a read, save the transaction so when the data comes back
-			// in a bus packet, we can staple it back into a transaction and return it
-			if (transaction->transactionType == DATA_READ)
+			else // no room, do nothing this cycle
 			{
-				pendingReadTransactions.push_back(transaction);
+				//PRINT( "== Warning - No room in command queue" << endl;
 			}
-			else
-			{
-				// just delete the transaction now that it's a buspacket
-				delete transaction; 
-			}
-			/* only allow one transaction to be scheduled per cycle -- this should
-			 * be a reasonable assumption considering how much logic would be
-			 * required to schedule multiple entries per cycle (parallel data
-			 * lines, switching logic, decision logic)
-			 */
-			break;
 		}
-		else // no room, do nothing this cycle
+	} else if (protection == DAG) {
+
+		// First, check if we have anything scheduled
+		int scheduledBank = -1;
+		int scheduledNode;
+
+		if (schedule.count(currentClockCycle)) {
+
+			scheduledNode = schedule[currentClockCycle];
+			scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
+			PRINT("Scheduled transaction " << scheduledNode << " to bank " << scheduledBank << " at time " << currentClockCycle << " and phase " << currentPhase);
+		}
+
+		for (size_t i=0;i<transactionQueue.size() + 1;i++)
 		{
-			//PRINT( "== Warning - No room in command queue" << endl;
+			Transaction *transaction;
+			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
+
+			// If we have a scheduled transaction, but have found no matching node in the transaction queue, create a fake transaction
+			if (i == transactionQueue.size()) {
+				if (scheduledBank == -1) break;
+
+				PRINT("No matching transaction, issuing fake request")
+
+				transaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
+				newTransactionChan = 0;
+				newTransactionRank = 0;
+				newTransactionBank = scheduledBank;
+				newTransactionRow = 0;
+				newTransactionColumn = 0;
+			} else {
+				//pop off top transaction from queue
+				//
+				//	assuming simple scheduling at the moment
+				//	will eventually add policies here
+				transaction = transactionQueue[i];
+
+				//map address to rank,bank,row,col
+
+				// pass these in as references so they get set by the addressMapping function
+				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
+			}
+
+			// If we have a request scheduled, try to match the bank with a transaction in the queue
+			if (scheduledBank != -1) {
+				if (transaction->securityDomain != dDefenceDomain && transaction->securityDomain != iDefenceDomain) continue;
+				//if (scheduledBank != newTransactionBank) continue;
+
+				// We have a match!
+				transaction->phaseID = currentPhase;
+				transaction->nodeID = scheduledNode;
+
+				PRINT("Matched transaction in queue!");
+			} else {
+				// If we do not have a request scheduled this cycle (and we're in a protection domain), do not service protected requests
+				if ((transaction->securityDomain == dDefenceDomain || transaction->securityDomain == iDefenceDomain) && (currentPhase != -1)) continue;
+			}
+
+			//if we have room, break up the transaction into the appropriate commands
+			//and add them to the command queue
+			if (commandQueue.hasRoomFor(2, newTransactionRank, newTransactionBank))
+			{
+				if (DEBUG_ADDR_MAP) 
+				{
+					PRINTN("== New Transaction - Mapping Address [0x" << hex << transaction->address << dec << "]");
+					if (transaction->transactionType == DATA_READ) 
+					{
+						PRINT(" (Read)");
+					}
+					else
+					{
+						PRINT(" (Write)");
+					}
+					PRINT("  Rank : " << newTransactionRank);
+					PRINT("  Bank : " << newTransactionBank);
+					PRINT("  Row  : " << newTransactionRow);
+					PRINT("  Col  : " << newTransactionColumn);
+					PRINT("  Domain  : " << transaction->securityDomain);
+					PRINT("  Time  : " << currentClockCycle);
+					PRINT("  Fake? : " << transaction->isFake);
+				}
+
+
+
+				//now that we know there is room in the command queue, we can remove from the transaction queue
+				if(!transaction->isFake) transactionQueue.erase(transactionQueue.begin()+i);
+
+				//create activate command to the row we just translated
+				BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
+						newTransactionColumn, newTransactionRow, newTransactionRank,
+						newTransactionBank, 0, dramsim_log);
+
+				//create read or write command and enqueue it
+				BusPacketType bpType = transaction->getBusPacketType();
+				BusPacket *command = new BusPacket(bpType, transaction->address,
+						newTransactionColumn, newTransactionRow, newTransactionRank,
+						newTransactionBank, transaction->data, dramsim_log);
+
+
+
+				commandQueue.enqueue(ACTcommand);
+				commandQueue.enqueue(command);
+
+				// If we have a read, save the transaction so when the data comes back
+				// in a bus packet, we can staple it back into a transaction and return it
+				if (transaction->transactionType == DATA_READ)
+				{
+					pendingReadTransactions.push_back(transaction);
+				}
+				else
+				{
+					// just delete the transaction now that it's a buspacket
+					delete transaction; 
+				}
+				/* only allow one transaction to be scheduled per cycle -- this should
+				* be a reasonable assumption considering how much logic would be
+				* required to schedule multiple entries per cycle (parallel data
+				* lines, switching logic, decision logic)
+				*/
+				break;
+			}
+			else // no room, do nothing this cycle
+			{
+				//PRINT( "== Warning - No room in command queue" << endl;
+			}
+		}
+	}
+	else {
+
+		int skip = 1;
+		if (protection == FixedService_Rank && currentClockCycle % 7 == 0) {
+			skip = 0;
+		} else if (protection == FixedService_Bank && currentClockCycle % 15 == 0) {
+			skip = 0;
+		}
+		
+		if (!skip) {
+			// Search for transaction we can issue
+			currentDomain = (currentDomain + 1) % NUM_DOMAINS;
+
+			for (size_t i=0;i<transactionQueue.size();i++)
+			{
+				//pop off top transaction from queue
+				//
+				//	assuming simple scheduling at the moment
+				//	will eventually add policies here
+				Transaction *transaction = transactionQueue[i];
+
+				//map address to rank,bank,row,col
+				unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
+
+				// pass these in as references so they get set by the addressMapping function
+				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
+
+				if (transaction->securityDomain == currentDomain) {
+					switch (protection) {
+						case FixedService_Rank:
+							newTransactionRank = transaction->securityDomain;
+							break;
+						case FixedService_Bank:
+							newTransactionBank = transaction->securityDomain;
+							newTransactionRank = 0;
+							break;
+						default:
+							break;
+					}
+				} else {continue;};
+
+				//if we have room, break up the transaction into the appropriate commands
+				//and add them to the command queue
+				if (commandQueue.hasRoomFor(2, newTransactionRank, newTransactionBank))
+				{
+					if (DEBUG_ADDR_MAP) 
+					{
+						PRINTN("== New Transaction - Mapping Address [0x" << hex << transaction->address << dec << "]");
+						if (transaction->transactionType == DATA_READ) 
+						{
+							PRINT(" (Read)");
+						}
+						else
+						{
+							PRINT(" (Write)");
+						}
+						PRINT("  Protection Domain  : " << transaction->securityDomain);
+						PRINT("  Rank : " << newTransactionRank);
+						PRINT("  Bank : " << newTransactionBank);
+						PRINT("  Row  : " << newTransactionRow);
+						PRINT("  Col  : " << newTransactionColumn);
+					}
+
+
+					//now that we know there is room in the command queue, we can remove from the transaction queue
+					transactionQueue.erase(transactionQueue.begin()+i);
+
+					//create activate command to the row we just translated
+					BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
+							newTransactionColumn, newTransactionRow, newTransactionRank,
+							newTransactionBank, 0, dramsim_log);
+
+					//create read or write command and enqueue it
+					BusPacketType bpType = transaction->getBusPacketType();
+					BusPacket *command = new BusPacket(bpType, transaction->address,
+							newTransactionColumn, newTransactionRow, newTransactionRank,
+							newTransactionBank, transaction->data, dramsim_log);
+
+
+
+					commandQueue.enqueue(ACTcommand);
+					commandQueue.enqueue(command);
+
+					// If we have a read, save the transaction so when the data comes back
+					// in a bus packet, we can staple it back into a transaction and return it
+					if (transaction->transactionType == DATA_READ)
+					{
+						pendingReadTransactions.push_back(transaction);
+					}
+					else
+					{
+						// just delete the transaction now that it's a buspacket
+						delete transaction; 
+					}
+					/* only allow one transaction to be scheduled per cycle -- this should
+					* be a reasonable assumption considering how much logic would be
+					* required to schedule multiple entries per cycle (parallel data
+					* lines, switching logic, decision logic)
+					*/
+					break;
+				}
+				else // no room, do nothing this cycle
+				{
+					PRINT( "== Warning - No room in command queue" << endl );
+				}
+			}
 		}
 	}
 
@@ -680,13 +936,68 @@ void MemoryController::update()
 				//	}
 				unsigned chan,rank,bank,row,col;
 				addressMapping(returnTransaction[0]->address,chan,rank,bank,row,col);
-				insertHistogram(currentClockCycle-pendingReadTransactions[i]->timeAdded,rank,bank);
-				//return latency
-				returnReadData(pendingReadTransactions[i]);
+				if(!pendingReadTransactions[i]->isFake) {
+					insertHistogram(currentClockCycle-pendingReadTransactions[i]->timeAdded,rank,bank);
+					//return latency
+					returnReadData(pendingReadTransactions[i]);
+				}
+
+				if (protection == DAG && 
+					(pendingReadTransactions[i]->securityDomain == iDefenceDomain ||
+					pendingReadTransactions[i]->securityDomain == dDefenceDomain)) {
+					// Update phase information
+					finishTimes[pendingReadTransactions[i]->nodeID] = currentClockCycle;
+					remainingInPhase--;
+
+					if (remainingInPhase == 0 && currentPhase < (this->dag.size() - 1)) {
+						// We're done with this phase! Schedule the next.
+						// First, schedule the next nodes
+						
+						int i = 0;
+						int j = 0;
+
+						int numNew = this->dag[to_string(currentPhase+1)]["node"].size();
+
+						PRINT("Starting new phase " << currentPhase+1);
+
+						for (auto& newNode : this->dag[to_string(currentPhase+1)]["node"].items()) {
+							remainingInPhase++;
+
+							uint64_t scheduledTime = 0;
+
+							i = j;
+							for (auto& oldNode : this->dag[to_string(currentPhase)]["node"].items()) {
+								assert(this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["sourceID"] == stoi(oldNode.key()));
+								assert(this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["destID"] == stoi(newNode.key()));
+
+								int edgeWeight = this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["latency"];
+
+								int scheduledCandidate = edgeWeight + finishTimes[stoi(oldNode.key())];
+								if (scheduledCandidate > scheduledTime) {
+									scheduledTime = scheduledCandidate;
+								}
+
+								i += numNew;
+							}
+							j++;
+							// Avoid scheduling conflicts
+							while (schedule.count(scheduledTime) > 0) scheduledTime++;
+							schedule[scheduledTime] = stoi(newNode.key());
+							PRINT("Scheduled " << newNode.key() << " at time " << scheduledTime);
+						}
+
+						currentPhase++;
+
+					}
+
+				}
+
 
 				delete pendingReadTransactions[i];
 				pendingReadTransactions.erase(pendingReadTransactions.begin()+i);
 				foundMatch=true; 
+
+
 				break;
 			}
 		}
@@ -769,6 +1080,9 @@ bool MemoryController::addTransaction(Transaction *trans)
 {
 	if (WillAcceptTransaction())
 	{
+		if (currentPhase != -1) 
+			PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << currentClockCycle << " Domain: " << trans->securityDomain);
+
 		trans->timeAdded = currentClockCycle;
 		transactionQueue.push_back(trans);
 		return true;

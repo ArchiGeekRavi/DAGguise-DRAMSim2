@@ -57,13 +57,17 @@ public:
 	TransactionType transactionType;
 	uint64_t address;
 	void *data;
+	uint64_t securityDomain;
 	uint64_t timeAdded;
 	uint64_t timeReturned;
 
+	int phaseID;
+	int nodeID;
+	bool isFake;
 
 	friend ostream &operator<<(ostream &os, const Transaction &t);
 	//functions
-	Transaction(TransactionType transType, uint64_t addr, void *data);
+	Transaction(TransactionType transType, uint64_t addr, void *data, uint64_t securityDomain, int phaseID, int nodeID, bool isFake);
 	Transaction(const Transaction &t);
 
 	BusPacketType getBusPacketType()

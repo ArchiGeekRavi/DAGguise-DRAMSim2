@@ -44,7 +44,7 @@ namespace DRAMSim
 
 	class MultiChannelMemorySystem {
 		public: 
-			bool addTransaction(bool isWrite, uint64_t addr);
+			bool addTransaction(bool isWrite, uint64_t addr, uin64_t domain);
 			void setCPUClockSpeed(uint64_t cpuClkFreqHz);
 			void update();
 			void printStats(bool finalStats);
@@ -60,6 +60,10 @@ namespace DRAMSim
 			int getIniUint(const std::string &field, unsigned int *val);
 			int getIniUint64(const std::string &field, uint64_t *val);
 			int getIniFloat(const std::string &field, float *val);
+
+			void startDefence(uint64_t iDefenceDomain, uint64_t dDefenceDomain);
+			void endDefence();
+
 	};
 	MultiChannelMemorySystem *getMemorySystemInstance(const string &dev, const string &sys, const string &pwd, const string &trc, unsigned megsOfMemory, std::string *visfilename=NULL);
 }

@@ -39,13 +39,12 @@
 #include "IniReader.h"
 
 
-
 using namespace DRAMSim; 
 
 
-MultiChannelMemorySystem::MultiChannelMemorySystem(const string &deviceIniFilename_, const string &systemIniFilename_, const string &pwd_, const string &traceFilename_, unsigned megsOfMemory_, string *visFilename_, const IniReader::OverrideMap *paramOverrides)
+MultiChannelMemorySystem::MultiChannelMemorySystem(const string &deviceIniFilename_, const string &systemIniFilename_, const string &pwd_, const string &traceFilename_, const string &defenceFilename_, unsigned megsOfMemory_, string *visFilename_, const IniReader::OverrideMap *paramOverrides)
 	:megsOfMemory(megsOfMemory_), deviceIniFilename(deviceIniFilename_),
-	systemIniFilename(systemIniFilename_), traceFilename(traceFilename_),
+	systemIniFilename(systemIniFilename_), traceFilename(traceFilename_), defenceFilename(defenceFilename_),
 	pwd(pwd_), visFilename(visFilename_), 
 	clockDomainCrosser(new ClockDomain::Callback<MultiChannelMemorySystem, void>(this, &MultiChannelMemorySystem::actual_update)),
 	csvOut(new CSVWriter(visDataOut))
@@ -441,10 +440,35 @@ bool MultiChannelMemorySystem::addTransaction(Transaction *trans)
 	return channels[channelNumber]->addTransaction(trans); 
 }
 
-bool MultiChannelMemorySystem::addTransaction(bool isWrite, uint64_t addr)
+bool MultiChannelMemorySystem::addTransaction(bool isWrite, uint64_t addr, uint64_t securityDomain)
 {
 	unsigned channelNumber = findChannelNumber(addr); 
-	return channels[channelNumber]->addTransaction(isWrite, addr); 
+	return channels[channelNumber]->addTransaction(isWrite, addr, securityDomain); 
+}
+
+void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dDefenceDomain) 
+{
+	PRINT("Starting Defence");
+	if (protection == DAG) {
+		PRINT("DAG Protection Enabled!");
+		std::ifstream i(defenceFilename.c_str());
+		i >> channels[0]->memoryController->dag;
+
+		channels[0]->memoryController->iDefenceDomain = iDefenceDomain;
+		channels[0]->memoryController->dDefenceDomain = dDefenceDomain;
+
+		PRINT("IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
+
+		channels[0]->memoryController->initDefence();
+	}
+	 
+	return;
+}
+
+void MultiChannelMemorySystem::endDefence()
+{
+	PRINT("Stopping Defence");
+	return;
 }
 
 /*
@@ -532,8 +556,8 @@ int MultiChannelMemorySystem::getIniFloat(const std::string& field, float *val)
 }
 
 namespace DRAMSim {
-MultiChannelMemorySystem *getMemorySystemInstance(const string &dev, const string &sys, const string &pwd, const string &trc, unsigned megsOfMemory, string *visfilename) 
+MultiChannelMemorySystem *getMemorySystemInstance(const string &dev, const string &sys, const string &pwd, const string &trc, const string &def, unsigned megsOfMemory, string *visfilename) 
 {
-	return new MultiChannelMemorySystem(dev, sys, pwd, trc, megsOfMemory, visfilename);
+	return new MultiChannelMemorySystem(dev, sys, pwd, trc, def, megsOfMemory, visfilename);
 }
 }

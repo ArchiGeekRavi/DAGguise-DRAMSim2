@@ -46,8 +46,14 @@
 #include "Rank.h"
 #include "CSVWriter.h"
 #include <map>
+#include <set>
+#include <stdlib.h>
+
+#include "json.hpp"
+
 
 using namespace std;
+using json = nlohmann::json;
 
 namespace DRAMSim
 {
@@ -68,10 +74,19 @@ public:
 	void update();
 	void printStats(bool finalStats = false);
 	void resetStats(); 
+	void initDefence();
 
+	map<int, uint64_t> finishTimes;
+	map<uint64_t, int> schedule;
+	int currentPhase;
+	int remainingInPhase;
 
 	//fields
 	vector<Transaction *> transactionQueue;
+
+	json dag;
+	uint64_t dDefenceDomain;
+	uint64_t iDefenceDomain;
 private:
 	ostream &dramsim_log;
 	vector< vector <BankState> > bankStates;
@@ -93,6 +108,9 @@ private:
 
 	vector<Rank *> *ranks;
 
+
+
+
 	//output file
 	CSVWriter &csvOut; 
 
@@ -103,6 +121,7 @@ private:
 	unsigned dataCyclesLeft;
 
 	uint64_t totalTransactions;
+	uint64_t currentDomain;
 	vector<uint64_t> grandTotalBankAccesses; 
 	vector<uint64_t> totalReadsPerBank;
 	vector<uint64_t> totalWritesPerBank;

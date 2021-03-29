@@ -47,6 +47,7 @@ unsigned NUM_BANKS;
 unsigned NUM_BANKS_LOG;
 unsigned NUM_CHANS;
 unsigned NUM_CHANS_LOG;
+unsigned NUM_DOMAINS;
 unsigned NUM_ROWS;
 unsigned NUM_ROWS_LOG;
 unsigned NUM_COLS;
@@ -113,6 +114,7 @@ string ROW_BUFFER_POLICY;
 string SCHEDULING_POLICY;
 string ADDRESS_MAPPING_SCHEME;
 string QUEUING_STRUCTURE;
+string PROTECTION;
 
 bool DEBUG_TRANS_Q;
 bool DEBUG_CMD_Q;
@@ -134,6 +136,7 @@ RowBufferPolicy rowBufferPolicy;
 SchedulingPolicy schedulingPolicy;
 AddressMappingScheme addressMappingScheme;
 QueuingStructure queuingStructure;
+Protection protection;
 
 
 //Map the string names to the variables they set
@@ -181,6 +184,8 @@ static ConfigMap configMap[] =
 	DEFINE_FLOAT_PARAM(Vdd,DEV_PARAM),
 
 	DEFINE_UINT_PARAM(NUM_CHANS,SYS_PARAM),
+	DEFINE_UINT_PARAM(NUM_DOMAINS,SYS_PARAM),
+
 	DEFINE_UINT_PARAM(JEDEC_DATA_BUS_BITS,SYS_PARAM),
 
 	//Memory Controller related parameters
@@ -196,6 +201,8 @@ static ConfigMap configMap[] =
 	DEFINE_STRING_PARAM(SCHEDULING_POLICY,SYS_PARAM),
 	DEFINE_STRING_PARAM(ADDRESS_MAPPING_SCHEME,SYS_PARAM),
 	DEFINE_STRING_PARAM(QUEUING_STRUCTURE,SYS_PARAM),
+	DEFINE_STRING_PARAM(PROTECTION,SYS_PARAM),
+
 	// debug flags
 	DEFINE_BOOL_PARAM(DEBUG_TRANS_Q,SYS_PARAM),
 	DEFINE_BOOL_PARAM(DEBUG_CMD_Q,SYS_PARAM),
@@ -616,6 +623,31 @@ void IniReader::InitEnumsFromStrings()
 	{
 		cout << "WARNING: Unknown queueing structure '"<<QUEUING_STRUCTURE<<"'; valid options are 'per_rank' and 'per_rank_per_bank', defaulting to Per Rank Per Bank"<<endl;
 		queuingStructure = PerRankPerBank;
+	}
+	
+	if (PROTECTION == "reg")
+	{
+		protection = Regular;
+	}
+	else if (PROTECTION == "fsb")
+	{
+		protection = FixedService_Bank;
+	}
+	else if (PROTECTION == "fsr")
+	{
+		protection = FixedService_Rank;
+	}
+	else if (PROTECTION == "fsc")
+	{
+		protection = FixedService_Channel;
+	}
+	else if (PROTECTION == "fst")
+	{
+		protection = FixedService_BTA;
+	}
+	else if (PROTECTION == "dag")
+	{
+		protection = DAG;
 	}
 
 	if (SCHEDULING_POLICY == "rank_then_bank_round_robin")

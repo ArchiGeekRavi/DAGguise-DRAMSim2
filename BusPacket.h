@@ -63,6 +63,7 @@ public:
 	unsigned bank;
 	unsigned rank;
 	uint64_t physicalAddress;
+	uint64_t securityDomain;
 	void *data;
 
 	//Functions

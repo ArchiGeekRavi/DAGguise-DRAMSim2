@@ -35,6 +35,8 @@
 #include "ClockDomain.h"
 #include "CSVWriter.h"
 
+#include "json.hpp"
+
 
 namespace DRAMSim {
 
@@ -43,12 +45,14 @@ class MultiChannelMemorySystem : public SimulatorObject
 {
 	public: 
 
-	MultiChannelMemorySystem(const string &dev, const string &sys, const string &pwd, const string &trc, unsigned megsOfMemory, string *visFilename=NULL, const IniReader::OverrideMap *paramOverrides=NULL);
+	MultiChannelMemorySystem(const string &dev, const string &sys, const string &pwd, const string &trc, const string &def, unsigned megsOfMemory, string *visFilename=NULL, const IniReader::OverrideMap *paramOverrides=NULL);
 		virtual ~MultiChannelMemorySystem();
 			bool addTransaction(Transaction *trans);
 			bool addTransaction(const Transaction &trans);
-			bool addTransaction(bool isWrite, uint64_t addr);
+			bool addTransaction(bool isWrite, uint64_t addr, uint64_t securityDomain);
 			bool willAcceptTransaction(); 
+			void startDefence(uint64_t iDefenceDomain, uint64_t dDefenceDomain);
+			void endDefence();
 			bool willAcceptTransaction(uint64_t addr); 
 			void update();
 			void printStats(bool finalStats=false);
@@ -77,6 +81,7 @@ class MultiChannelMemorySystem : public SimulatorObject
 		string deviceIniFilename;
 		string systemIniFilename;
 		string traceFilename;
+		string defenceFilename;
 		string pwd;
 		string *visFilename;
 		ClockDomain::ClockDomainCrosser clockDomainCrosser; 

@@ -78,6 +78,7 @@ extern unsigned NUM_RANKS;
 extern unsigned NUM_RANKS_LOG;
 extern unsigned NUM_CHANS;
 extern unsigned NUM_CHANS_LOG;
+extern unsigned NUM_DOMAINS;
 extern unsigned NUM_ROWS;
 extern unsigned NUM_ROWS_LOG;
 extern unsigned NUM_COLS;
@@ -141,6 +142,8 @@ extern std::string ROW_BUFFER_POLICY;
 extern std::string SCHEDULING_POLICY;
 extern std::string ADDRESS_MAPPING_SCHEME;
 extern std::string QUEUING_STRUCTURE;
+extern std::string PROTECTION;
+
 
 enum TraceType
 {
@@ -180,6 +183,16 @@ enum SchedulingPolicy
 	BankThenRankRoundRobin
 };
 
+enum Protection
+{
+	Regular,
+	FixedService_Bank,
+	FixedService_Rank,
+	FixedService_Channel,
+	FixedService_BTA,
+	DAG
+};
+
 
 // set by IniReader.cpp
 
@@ -193,6 +206,8 @@ extern RowBufferPolicy rowBufferPolicy;
 extern SchedulingPolicy schedulingPolicy;
 extern AddressMappingScheme addressMappingScheme;
 extern QueuingStructure queuingStructure;
+extern Protection protection;
+
 //
 //FUNCTIONS
 //

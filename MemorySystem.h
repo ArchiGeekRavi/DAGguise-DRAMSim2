@@ -59,7 +59,7 @@ public:
 	virtual ~MemorySystem();
 	void update();
 	bool addTransaction(Transaction *trans);
-	bool addTransaction(bool isWrite, uint64_t addr);
+	bool addTransaction(bool isWrite, uint64_t addr, uint64_t securityDomain);
 	void printStats(bool finalStats);
 	bool WillAcceptTransaction();
 	void RegisterCallbacks(
