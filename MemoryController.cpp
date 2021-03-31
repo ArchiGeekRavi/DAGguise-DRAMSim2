@@ -161,11 +161,17 @@ void MemoryController::initDefence()
 	currentPhase = 0;
 	remainingInPhase = 0;
 
+	fixedRateFallback = false;
+
+	//TODO: Make this dynamic!
+	fixedRate = 200;
+
 	PRINT("Starting initial phase!");
 	for (auto& node : this->dag[to_string(currentPhase)]["node"].items()) {
 		PRINT("Scheduling node " << node.key() << "at time" << currentClockCycle + remainingInPhase);
 		schedule[currentClockCycle + remainingInPhase++] = stoi(node.key());
 	}
+
 
 }
 
@@ -596,30 +602,23 @@ void MemoryController::update()
 		int scheduledNode;
 
 		if (schedule.count(currentClockCycle)) {
-
 			scheduledNode = schedule[currentClockCycle];
-			scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
+			if (!fixedRateFallback) {
+				scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
+			} else {
+				scheduledBank = 0;
+				// Schedule next fixedrate transaction while we're here!
+				schedule[currentClockCycle+fixedRate] = 0;
+			}
 			PRINT("Scheduled transaction " << scheduledNode << " to bank " << scheduledBank << " at time " << currentClockCycle << " and phase " << currentPhase);
 		}
 
-		for (size_t i=0;i<transactionQueue.size() + 1;i++)
+		for (size_t i=0;i<=transactionQueue.size();i++)
 		{
 			Transaction *transaction;
 			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 
-			// If we have a scheduled transaction, but have found no matching node in the transaction queue, create a fake transaction
-			if (i == transactionQueue.size()) {
-				if (scheduledBank == -1) break;
-
-				PRINT("No matching transaction, issuing fake request")
-
-				transaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
-				newTransactionChan = 0;
-				newTransactionRank = 0;
-				newTransactionBank = scheduledBank;
-				newTransactionRow = 0;
-				newTransactionColumn = 0;
-			} else {
+			if (i != transactionQueue.size()) {
 				//pop off top transaction from queue
 				//
 				//	assuming simple scheduling at the moment
@@ -630,6 +629,19 @@ void MemoryController::update()
 
 				// pass these in as references so they get set by the addressMapping function
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
+
+			} else {
+				// If we have a scheduled transaction, but have found no matching node in the transaction queue, create a fake transaction
+				if (scheduledBank == -1) break;
+
+				PRINT("No matching transaction, issuing fake request")
+
+				transaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
+				newTransactionChan = 0;
+				newTransactionRank = 0;
+				newTransactionBank = scheduledBank;
+				newTransactionRow = 0;
+				newTransactionColumn = 0;
 			}
 
 			// If we have a request scheduled, try to match the bank with a transaction in the queue
@@ -942,7 +954,7 @@ void MemoryController::update()
 					returnReadData(pendingReadTransactions[i]);
 				}
 
-				if (protection == DAG && 
+				if (protection == DAG && !fixedRateFallback &&
 					(pendingReadTransactions[i]->securityDomain == iDefenceDomain ||
 					pendingReadTransactions[i]->securityDomain == dDefenceDomain)) {
 					// Update phase information
@@ -990,6 +1002,12 @@ void MemoryController::update()
 
 					}
 
+				}
+
+				if (currentPhase == this->dag.size() && !fixedRateFallback) {
+					PRINT("WARNING: Finished Defence DAG, falling back to fixed rate pattern!");
+					fixedRateFallback = true;
+					schedule[currentClockCycle+fixedRate] = 0;
 				}
 
 

@@ -81,6 +81,9 @@ public:
 	int currentPhase;
 	int remainingInPhase;
 
+	bool fixedRateFallback;
+	int fixedRate;
+
 	//fields
 	vector<Transaction *> transactionQueue;
 
