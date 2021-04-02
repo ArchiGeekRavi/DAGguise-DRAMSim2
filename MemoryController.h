@@ -77,6 +77,7 @@ public:
 	void resetStats(); 
 	void initDefence();
 	void stopDefence();
+	void scheduleInitialPhase();
 
 	map<int, uint64_t> finishTimes;
 	map<uint64_t, int> schedule;
@@ -90,6 +91,7 @@ public:
 	int totalNodes;
 
 	bool fixedRateFallback;
+	bool beginWait;
 	int fixedRate;
 	bool requestDefenceDone;
 

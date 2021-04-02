@@ -91,6 +91,7 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	totalFakeRequests = 0;
 
 	requestDefenceDone = false;
+	beginWait = true;
 
 
 	//reserve memory for vectors
@@ -170,6 +171,7 @@ void MemoryController::initDefence()
 	requestDefenceDone = false;
 
 	fixedRateFallback = false;
+	beginWait = true;
 
 	fakeRequestsThisPhase = 0;
 	nodesThisPhase = 0;
@@ -177,15 +179,28 @@ void MemoryController::initDefence()
 	//TODO: Make this dynamic!
 	fixedRate = 200;
 
+	for (auto& node : this->dag[to_string(currentPhase)]["node"].items()) {
+		remainingInPhase++;
+		if(DEBUG_DEFENCE) PRINT("Initial seen node: " << node.key());
+	}
+
 	if(DEBUG_DEFENCE) PRINT("Starting initial phase!");
+}
+
+void MemoryController::scheduleInitialPhase()
+{
+	if(DEBUG_DEFENCE) PRINT("Scheduling initial phase nodes!");
+
+	assert (currentPhase == 0);
+	assert (beginWait == true);
+	int i = 1;
 	for (auto& node : this->dag[to_string(currentPhase)]["node"].items()) {
 		nodesThisPhase++;
 		totalNodes++;
 		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << "at time" << currentClockCycle + remainingInPhase);
-		schedule[currentClockCycle + remainingInPhase++] = stoi(node.key());
+		schedule[currentClockCycle + i++] = stoi(node.key());
 	}
-
-
+	beginWait = false;
 }
 
 void MemoryController::stopDefence()
@@ -693,6 +708,10 @@ void MemoryController::update()
 			// pass these in as references so they get set by the addressMapping function
 			addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
+			//TODO: Remove me!
+			newTransactionBank = 0;
+			newTransactionRank = 0;
+
 			// If we have a request scheduled, try to match the bank with a transaction in the queue
 
 			//if we have room, break up the transaction into the appropriate commands
@@ -1156,6 +1175,10 @@ bool MemoryController::addTransaction(Transaction *trans)
 
 	if (trans->securityDomain == dDefenceDomain) {
 		defenceQueue.push_back(trans);
+
+		if (beginWait == true) {
+			scheduleInitialPhase();
+		}
 		return true;
 	}
 
