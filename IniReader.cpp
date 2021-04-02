@@ -101,6 +101,7 @@ unsigned JEDEC_DATA_BUS_BITS;
 
 //Memory Controller related parameters
 unsigned TRANS_QUEUE_DEPTH;
+unsigned DEFENCE_QUEUE_DEPTH;
 unsigned CMD_QUEUE_DEPTH;
 
 //cycles within an epoch
@@ -191,6 +192,7 @@ static ConfigMap configMap[] =
 
 	//Memory Controller related parameters
 	DEFINE_UINT_PARAM(TRANS_QUEUE_DEPTH,SYS_PARAM),
+	DEFINE_UINT_PARAM(DEFENCE_QUEUE_DEPTH,SYS_PARAM),
 	DEFINE_UINT_PARAM(CMD_QUEUE_DEPTH,SYS_PARAM),
 
 	DEFINE_UINT_PARAM(EPOCH_LENGTH,SYS_PARAM),

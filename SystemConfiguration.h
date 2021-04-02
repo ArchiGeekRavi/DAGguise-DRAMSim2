@@ -133,6 +133,7 @@ extern unsigned JEDEC_DATA_BUS_BITS;
 
 //Memory Controller related parameters
 extern unsigned TRANS_QUEUE_DEPTH;
+extern unsigned DEFENCE_QUEUE_DEPTH;
 extern unsigned CMD_QUEUE_DEPTH;
 
 extern unsigned EPOCH_LENGTH;

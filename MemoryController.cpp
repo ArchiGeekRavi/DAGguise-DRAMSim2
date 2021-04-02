@@ -95,6 +95,7 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 
 	//reserve memory for vectors
 	transactionQueue.reserve(TRANS_QUEUE_DEPTH);
+	defenceQueue.reserve(DEFENCE_QUEUE_DEPTH);
 	powerDown = vector<bool>(NUM_RANKS,false);
 	grandTotalBankAccesses = vector<uint64_t>(NUM_RANKS*NUM_BANKS,0);
 	totalReadsPerBank = vector<uint64_t>(NUM_RANKS*NUM_BANKS,0);
@@ -620,6 +621,7 @@ void MemoryController::update()
 		int scheduledNode;
 
 		if (currentPhase != -1 && schedule.count(currentClockCycle)) {
+			// Determine the scheduled defence node's information
 			scheduledNode = schedule[currentClockCycle];
 			if (!fixedRateFallback) {
 				scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
@@ -628,31 +630,38 @@ void MemoryController::update()
 				// Schedule next fixedrate transaction while we're here!
 				schedule[currentClockCycle+fixedRate] = 0;
 			}
-			if(DEBUG_DEFENCE) PRINT("Scheduled transaction " << scheduledNode << " to bank " << scheduledBank << " at time " << currentClockCycle << " and phase " << currentPhase);
-		}
 
-		for (size_t i=0;i<=transactionQueue.size();i++)
-		{
 			Transaction *transaction;
+			bool found = false;
 			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 
-			if (i != transactionQueue.size()) {
-				//pop off top transaction from queue
-				//
-				//	assuming simple scheduling at the moment
-				//	will eventually add policies here
-				transaction = transactionQueue[i];
-
-				//map address to rank,bank,row,col
-
-				// pass these in as references so they get set by the addressMapping function
+			// Search the defence queue for a match...
+			for (size_t i=0; i<defenceQueue.size(); i++) {
+				transaction = defenceQueue[i];
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
-			} else {
-				// If we have a scheduled transaction, but have found no matching node in the transaction queue, create a fake transaction
-				if (scheduledBank == -1) break;
+				found = true;
 
-				if(DEBUG_DEFENCE) PRINT("No matching transaction, issuing fake request")
+				transaction->phaseID = currentPhase;
+				transaction->nodeID = scheduledNode;
+
+				defenceQueue.erase(defenceQueue.begin()+i);
+
+				break;
+
+				/* MULTI-BANK
+				if (scheduledBank == newTransactionBank) {
+					transaction->phaseID = currentPhase;
+					transaction->nodeId = scheduledNode;
+
+					found = true;
+					break;
+				}
+				*/
+			}
+
+			if (!found) {
+				if(DEBUG_DEFENCE) PRINT("No matching transaction, enqueuing fake request")
 				fakeRequestsThisPhase++;
 
 				transaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
@@ -663,22 +672,28 @@ void MemoryController::update()
 				newTransactionColumn = 0;
 			}
 
+			transaction->timeAdded = currentClockCycle;
+			transactionQueue.push_back(transaction);
+
+		}
+
+		for (size_t i=0;i<transactionQueue.size();i++)
+		{
+			Transaction *transaction;
+			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
+
+			//pop off top transaction from queue
+			//
+			//	assuming simple scheduling at the moment
+			//	will eventually add policies here
+			transaction = transactionQueue[i];
+
+			//map address to rank,bank,row,col
+
+			// pass these in as references so they get set by the addressMapping function
+			addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
+
 			// If we have a request scheduled, try to match the bank with a transaction in the queue
-			if (scheduledBank != -1) {
-				//if (transaction->securityDomain != dDefenceDomain && transaction->securityDomain != iDefenceDomain) continue;
-				if (transaction->securityDomain != dDefenceDomain) continue;
-
-				//if (scheduledBank != newTransactionBank) continue;
-
-				// We have a match!
-				transaction->phaseID = currentPhase;
-				transaction->nodeID = scheduledNode;
-			} else {
-				// If we do not have a request scheduled this cycle (and we're in a protection domain), do not service protected requests
-				//if ((transaction->securityDomain == dDefenceDomain || transaction->securityDomain == iDefenceDomain) && (currentPhase != -1)) continue;
-				if ((transaction->securityDomain == dDefenceDomain) && (currentPhase != -1)) continue;
-
-			}
 
 			//if we have room, break up the transaction into the appropriate commands
 			//and add them to the command queue
@@ -704,10 +719,8 @@ void MemoryController::update()
 					PRINT("  Fake? : " << transaction->isFake);
 				}
 
-
-
 				//now that we know there is room in the command queue, we can remove from the transaction queue
-				if(!transaction->isFake) transactionQueue.erase(transactionQueue.begin()+i);
+				transactionQueue.erase(transactionQueue.begin()+i);
 
 				//create activate command to the row we just translated
 				BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
@@ -1131,14 +1144,23 @@ bool MemoryController::WillAcceptTransaction()
 	return transactionQueue.size() < TRANS_QUEUE_DEPTH;
 }
 
+bool MemoryController::WillAcceptDefenceTransaction()
+{
+	return defenceQueue.size() < DEFENCE_QUEUE_DEPTH;
+}
+
 //allows outside source to make request of memory system
 bool MemoryController::addTransaction(Transaction *trans)
 {
+	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain);
+
+	if (trans->securityDomain == dDefenceDomain) {
+		defenceQueue.push_back(trans);
+		return true;
+	}
+
 	if (WillAcceptTransaction())
 	{
-		if (currentPhase != -1) 
-			if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain);
-
 		trans->timeAdded = currentClockCycle;
 		transactionQueue.push_back(trans);
 		return true;
