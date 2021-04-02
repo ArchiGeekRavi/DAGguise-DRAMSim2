@@ -75,14 +75,22 @@ public:
 	void printStats(bool finalStats = false);
 	void resetStats(); 
 	void initDefence();
+	void stopDefence();
 
 	map<int, uint64_t> finishTimes;
 	map<uint64_t, int> schedule;
 	int currentPhase;
 	int remainingInPhase;
 
+	int fakeRequestsThisPhase;
+	int nodesThisPhase;
+	
+	int totalFakeRequests;
+	int totalNodes;
+
 	bool fixedRateFallback;
 	int fixedRate;
+	bool requestDefenceDone;
 
 	//fields
 	vector<Transaction *> transactionQueue;

@@ -448,16 +448,16 @@ bool MultiChannelMemorySystem::addTransaction(bool isWrite, uint64_t addr, uint6
 
 void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dDefenceDomain) 
 {
-	PRINT("Starting Defence");
+	if (DEBUG_DEFENCE) PRINT("Starting Defence");
 	if (protection == DAG) {
-		PRINT("DAG Protection Enabled!");
+		if (DEBUG_DEFENCE) PRINT("DAG Protection Enabled!");
 		std::ifstream i(defenceFilename.c_str());
 		i >> channels[0]->memoryController->dag;
 
 		channels[0]->memoryController->iDefenceDomain = iDefenceDomain;
 		channels[0]->memoryController->dDefenceDomain = dDefenceDomain;
 
-		PRINT("IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
+		if (DEBUG_DEFENCE) PRINT("IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
 
 		channels[0]->memoryController->initDefence();
 	}
@@ -467,8 +467,8 @@ void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dD
 
 void MultiChannelMemorySystem::endDefence()
 {
-	PRINT("Stopping Defence");
-	return;
+	if (DEBUG_DEFENCE) PRINT("Stopping Defence");
+	channels[0]->memoryController->stopDefence();
 }
 
 /*

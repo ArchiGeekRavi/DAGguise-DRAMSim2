@@ -87,6 +87,12 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	currentPhase = -1;
 	remainingInPhase = 0;
 
+	totalNodes = 0;
+	totalFakeRequests = 0;
+
+	requestDefenceDone = false;
+
+
 	//reserve memory for vectors
 	transactionQueue.reserve(TRANS_QUEUE_DEPTH);
 	powerDown = vector<bool>(NUM_RANKS,false);
@@ -160,19 +166,31 @@ void MemoryController::initDefence()
 	/* Create bookkeeping maps for convenience */
 	currentPhase = 0;
 	remainingInPhase = 0;
+	requestDefenceDone = false;
 
 	fixedRateFallback = false;
+
+	fakeRequestsThisPhase = 0;
+	nodesThisPhase = 0;
 
 	//TODO: Make this dynamic!
 	fixedRate = 200;
 
-	PRINT("Starting initial phase!");
+	if(DEBUG_DEFENCE) PRINT("Starting initial phase!");
 	for (auto& node : this->dag[to_string(currentPhase)]["node"].items()) {
-		PRINT("Scheduling node " << node.key() << "at time" << currentClockCycle + remainingInPhase);
+		nodesThisPhase++;
+		totalNodes++;
+		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << "at time" << currentClockCycle + remainingInPhase);
 		schedule[currentClockCycle + remainingInPhase++] = stoi(node.key());
 	}
 
 
+}
+
+void MemoryController::stopDefence()
+{
+	if(DEBUG_DEFENCE) PRINT("Sending stop defence request!");
+	requestDefenceDone = true; 
 }
 
 //memory controller update
@@ -601,7 +619,7 @@ void MemoryController::update()
 		int scheduledBank = -1;
 		int scheduledNode;
 
-		if (schedule.count(currentClockCycle)) {
+		if (currentPhase != -1 && schedule.count(currentClockCycle)) {
 			scheduledNode = schedule[currentClockCycle];
 			if (!fixedRateFallback) {
 				scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
@@ -610,7 +628,7 @@ void MemoryController::update()
 				// Schedule next fixedrate transaction while we're here!
 				schedule[currentClockCycle+fixedRate] = 0;
 			}
-			PRINT("Scheduled transaction " << scheduledNode << " to bank " << scheduledBank << " at time " << currentClockCycle << " and phase " << currentPhase);
+			if(DEBUG_DEFENCE) PRINT("Scheduled transaction " << scheduledNode << " to bank " << scheduledBank << " at time " << currentClockCycle << " and phase " << currentPhase);
 		}
 
 		for (size_t i=0;i<=transactionQueue.size();i++)
@@ -634,7 +652,8 @@ void MemoryController::update()
 				// If we have a scheduled transaction, but have found no matching node in the transaction queue, create a fake transaction
 				if (scheduledBank == -1) break;
 
-				PRINT("No matching transaction, issuing fake request")
+				if(DEBUG_DEFENCE) PRINT("No matching transaction, issuing fake request")
+				fakeRequestsThisPhase++;
 
 				transaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
 				newTransactionChan = 0;
@@ -646,17 +665,19 @@ void MemoryController::update()
 
 			// If we have a request scheduled, try to match the bank with a transaction in the queue
 			if (scheduledBank != -1) {
-				if (transaction->securityDomain != dDefenceDomain && transaction->securityDomain != iDefenceDomain) continue;
+				//if (transaction->securityDomain != dDefenceDomain && transaction->securityDomain != iDefenceDomain) continue;
+				if (transaction->securityDomain != dDefenceDomain) continue;
+
 				//if (scheduledBank != newTransactionBank) continue;
 
 				// We have a match!
 				transaction->phaseID = currentPhase;
 				transaction->nodeID = scheduledNode;
-
-				PRINT("Matched transaction in queue!");
 			} else {
 				// If we do not have a request scheduled this cycle (and we're in a protection domain), do not service protected requests
-				if ((transaction->securityDomain == dDefenceDomain || transaction->securityDomain == iDefenceDomain) && (currentPhase != -1)) continue;
+				//if ((transaction->securityDomain == dDefenceDomain || transaction->securityDomain == iDefenceDomain) && (currentPhase != -1)) continue;
+				if ((transaction->securityDomain == dDefenceDomain) && (currentPhase != -1)) continue;
+
 			}
 
 			//if we have room, break up the transaction into the appropriate commands
@@ -954,9 +975,8 @@ void MemoryController::update()
 					returnReadData(pendingReadTransactions[i]);
 				}
 
-				if (protection == DAG && !fixedRateFallback &&
-					(pendingReadTransactions[i]->securityDomain == iDefenceDomain ||
-					pendingReadTransactions[i]->securityDomain == dDefenceDomain)) {
+				if (protection == DAG && !fixedRateFallback && currentPhase != -1 &&
+					(/*pendingReadTransactions[i]->securityDomain == iDefenceDomain ||*/ pendingReadTransactions[i]->securityDomain == dDefenceDomain)) {
 					// Update phase information
 					finishTimes[pendingReadTransactions[i]->nodeID] = currentClockCycle;
 					remainingInPhase--;
@@ -970,10 +990,17 @@ void MemoryController::update()
 
 						int numNew = this->dag[to_string(currentPhase+1)]["node"].size();
 
-						PRINT("Starting new phase " << currentPhase+1);
+						if(DEBUG_DEFENCE) PRINT("Finished Phase: " << currentPhase << ". Fake requests issued: " << fakeRequestsThisPhase << " out of " << nodesThisPhase << " nodes.");
+						if(DEBUG_DEFENCE) PRINT("Starting new phase " << currentPhase+1);
+
+						totalFakeRequests += fakeRequestsThisPhase;
+						fakeRequestsThisPhase = 0;
+						nodesThisPhase = 0;
 
 						for (auto& newNode : this->dag[to_string(currentPhase+1)]["node"].items()) {
 							remainingInPhase++;
+							nodesThisPhase++;
+							totalNodes++;
 
 							uint64_t scheduledTime = 0;
 
@@ -995,7 +1022,7 @@ void MemoryController::update()
 							// Avoid scheduling conflicts
 							while (schedule.count(scheduledTime) > 0) scheduledTime++;
 							schedule[scheduledTime] = stoi(newNode.key());
-							PRINT("Scheduled " << newNode.key() << " at time " << scheduledTime);
+							if(DEBUG_DEFENCE) PRINT("Scheduled " << newNode.key() << " at time " << scheduledTime);
 						}
 
 						currentPhase++;
@@ -1004,8 +1031,19 @@ void MemoryController::update()
 
 				}
 
-				if (currentPhase == this->dag.size() && !fixedRateFallback) {
-					PRINT("WARNING: Finished Defence DAG, falling back to fixed rate pattern!");
+				if (protection == DAG && remainingInPhase == 0 && (currentPhase == this->dag.size()-1) && requestDefenceDone) {
+					totalFakeRequests += fakeRequestsThisPhase;
+					fakeRequestsThisPhase = 0;
+
+					if(DEBUG_DEFENCE) {
+						PRINT("Finished defence DAG, disabling defences!");
+						PRINT("Total Defence Nodes Executed: " << std::dec << totalNodes << ", Number of Fake Requests: " << totalFakeRequests);
+					}
+
+					currentPhase = -1;
+				}
+				else if (protection == DAG && remainingInPhase == 0 && (currentPhase == this->dag.size()-1) && !fixedRateFallback) {
+					if(DEBUG_DEFENCE) PRINT("WARNING: Finished Defence DAG, falling back to fixed rate pattern!");
 					fixedRateFallback = true;
 					schedule[currentClockCycle+fixedRate] = 0;
 				}
@@ -1099,7 +1137,7 @@ bool MemoryController::addTransaction(Transaction *trans)
 	if (WillAcceptTransaction())
 	{
 		if (currentPhase != -1) 
-			PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << currentClockCycle << " Domain: " << trans->securityDomain);
+			if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain);
 
 		trans->timeAdded = currentClockCycle;
 		transactionQueue.push_back(trans);
