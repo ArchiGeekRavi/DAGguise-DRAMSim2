@@ -193,11 +193,11 @@ void MemoryController::scheduleInitialPhase()
 
 	assert (currentPhase == 0);
 	assert (beginWait == true);
-	int i = 1;
+	int i = 0;
 	for (auto& node : this->dag[to_string(currentPhase)]["node"].items()) {
 		nodesThisPhase++;
 		totalNodes++;
-		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << "at time" << currentClockCycle + remainingInPhase);
+		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << "at time" << currentClockCycle + i);
 		schedule[currentClockCycle + i++] = stoi(node.key());
 	}
 	beginWait = false;
@@ -635,7 +635,7 @@ void MemoryController::update()
 		int scheduledBank = -1;
 		int scheduledNode;
 
-		if (currentPhase != -1 && schedule.count(currentClockCycle)) {
+		if (beginWait == false && currentPhase != -1 && schedule.count(currentClockCycle)) {
 			// Determine the scheduled defence node's information
 			scheduledNode = schedule[currentClockCycle];
 			if (!fixedRateFallback) {
@@ -1007,7 +1007,7 @@ void MemoryController::update()
 					returnReadData(pendingReadTransactions[i]);
 				}
 
-				if (protection == DAG && !fixedRateFallback && currentPhase != -1 &&
+				if (protection == DAG && !fixedRateFallback && currentPhase != -1 && !beginWait &&
 					(/*pendingReadTransactions[i]->securityDomain == iDefenceDomain ||*/ pendingReadTransactions[i]->securityDomain == dDefenceDomain)) {
 					// Update phase information
 					finishTimes[pendingReadTransactions[i]->nodeID] = currentClockCycle;
@@ -1073,6 +1073,11 @@ void MemoryController::update()
 					}
 
 					currentPhase = -1;
+                                        for (size_t i=0; i<defenceQueue.size(); i++) {
+                                               Transaction* transaction = defenceQueue[i];
+				               defenceQueue.erase(defenceQueue.begin()+i);
+                                               transactionQueue.push_back(transaction);
+                                        }
 				}
 				else if (protection == DAG && remainingInPhase == 0 && (currentPhase == this->dag.size()-1) && !fixedRateFallback) {
 					if(DEBUG_DEFENCE) PRINT("WARNING: Finished Defence DAG, falling back to fixed rate pattern!");
@@ -1173,7 +1178,7 @@ bool MemoryController::addTransaction(Transaction *trans)
 {
 	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain);
 
-	if (trans->securityDomain == dDefenceDomain) {
+	if (trans->securityDomain == dDefenceDomain && currentPhase != -1) {
 		defenceQueue.push_back(trans);
 
 		if (beginWait == true) {
