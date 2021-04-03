@@ -203,7 +203,7 @@ void MemoryController::scheduleInitialPhase()
         int scheduledTime = int(this->dag[to_string(currentPhase)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV + currentClockCycle;
 		while (schedule.count(scheduledTime) > 0) scheduledTime++;
 
-		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << "at time" << scheduledTime);
+		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
 		schedule[scheduledTime] = stoi(node.key());
 	}
 	beginWait = false;
@@ -660,7 +660,13 @@ void MemoryController::update()
 
 			Transaction *writeTransaction;
 			bool writeFound = false;
-			int writeRequested = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["combinedWB"];
+			int writeRequested;
+			
+			if (!fixedRateFallback) {
+				writeRequested = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["combinedWB"];
+			} else {
+				writeRequested = 1;
+			}
 
 			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 
@@ -1065,7 +1071,7 @@ void MemoryController::update()
 						int numNew = this->dag[to_string(currentPhase+1)]["node"].size();
 
 						if(DEBUG_DEFENCE) PRINT("Finished Phase: " << currentPhase << ". Fake read requests issued: " << fakeReadRequestsThisPhase << " out of " << nodesThisPhase << " nodes.");
-						if(DEBUG_DEFENCE) PRINT("Starting new phase " << currentPhase+1);
+						if(DEBUG_DEFENCE) PRINT("==== Starting new phase " << currentPhase+1 << " ====");
 
 						totalFakeReadRequests += fakeReadRequestsThisPhase;
 						totalFakeWriteRequests += fakeWriteRequestsThisPhase;
@@ -1099,7 +1105,7 @@ void MemoryController::update()
 							// Avoid scheduling conflicts
 							while (schedule.count(scheduledTime) > 0) scheduledTime++;
 							schedule[scheduledTime] = stoi(newNode.key());
-							if(DEBUG_DEFENCE) PRINT("Scheduled " << newNode.key() << " at time " << scheduledTime);
+							if(DEBUG_DEFENCE) PRINT("Scheduled " << newNode.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
 						}
 
 						currentPhase++;
@@ -1222,7 +1228,7 @@ bool MemoryController::WillAcceptDefenceTransaction()
 //allows outside source to make request of memory system
 bool MemoryController::addTransaction(Transaction *trans)
 {
-	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain);
+	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain << " isWrite? " << (trans->transactionType == DATA_WRITE));
 
 	if (trans->securityDomain == dDefenceDomain && currentPhase != -1) {
 		defenceQueue.push_back(trans);
