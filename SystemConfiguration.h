@@ -137,6 +137,7 @@ extern unsigned DEFENCE_QUEUE_DEPTH;
 extern unsigned CMD_QUEUE_DEPTH;
 
 extern unsigned EPOCH_LENGTH;
+extern unsigned DEF_CLK_DIV;
 
 extern unsigned TOTAL_ROW_ACCESSES;
 

@@ -107,6 +107,8 @@ unsigned CMD_QUEUE_DEPTH;
 //cycles within an epoch
 unsigned EPOCH_LENGTH;
 
+unsigned DEF_CLK_DIV;
+
 //row accesses allowed before closing (open page)
 unsigned TOTAL_ROW_ACCESSES;
 
@@ -196,6 +198,7 @@ static ConfigMap configMap[] =
 	DEFINE_UINT_PARAM(CMD_QUEUE_DEPTH,SYS_PARAM),
 
 	DEFINE_UINT_PARAM(EPOCH_LENGTH,SYS_PARAM),
+	DEFINE_UINT_PARAM(DEF_CLK_DIV,SYS_PARAM),
 	//Power
 	DEFINE_BOOL_PARAM(USE_LOW_POWER,SYS_PARAM),
 
