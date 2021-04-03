@@ -46,7 +46,7 @@ using namespace DRAMSim;
 using namespace std;
 
 BusPacket::BusPacket(BusPacketType packtype, uint64_t physicalAddr, 
-		unsigned col, unsigned rw, unsigned r, unsigned b, void *dat, 
+		unsigned col, unsigned rw, unsigned r, unsigned b, void *dat, bool isFake,
 		ostream &dramsim_log_) :
 	dramsim_log(dramsim_log_),
 	busPacketType(packtype),
@@ -55,7 +55,8 @@ BusPacket::BusPacket(BusPacketType packtype, uint64_t physicalAddr,
 	bank(b),
 	rank(r),
 	physicalAddress(physicalAddr),
-	data(dat)
+	data(dat),
+	isFake(isFake)
 {}
 
 void BusPacket::print(uint64_t currentClockCycle, bool dataStart)

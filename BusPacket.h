@@ -65,9 +65,11 @@ public:
 	uint64_t physicalAddress;
 	uint64_t securityDomain;
 	void *data;
+	bool isFake;
+
 
 	//Functions
-	BusPacket(BusPacketType packtype, uint64_t physicalAddr, unsigned col, unsigned rw, unsigned r, unsigned b, void *dat, ostream &dramsim_log_);
+	BusPacket(BusPacketType packtype, uint64_t physicalAddr, unsigned col, unsigned rw, unsigned r, unsigned b, void *dat, bool isFake, ostream &dramsim_log_);
 
 	void print();
 	void print(uint64_t currentClockCycle, bool dataStart);

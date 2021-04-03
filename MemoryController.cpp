@@ -88,7 +88,8 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	remainingInPhase = 0;
 
 	totalNodes = 0;
-	totalFakeRequests = 0;
+	totalFakeReadRequests = 0;
+	totalFakeWriteRequests = 0;
 
 	requestDefenceDone = false;
 	beginWait = true;
@@ -173,7 +174,8 @@ void MemoryController::initDefence()
 	fixedRateFallback = false;
 	beginWait = true;
 
-	fakeRequestsThisPhase = 0;
+	fakeReadRequestsThisPhase = 0;
+	fakeWriteRequestsThisPhase = 0;
 	nodesThisPhase = 0;
 
 	//TODO: Make this dynamic!
@@ -198,7 +200,7 @@ void MemoryController::scheduleInitialPhase()
 		nodesThisPhase++;
 		totalNodes++;
 
-                int scheduledTime = int(this->dag[to_string(currentPhase)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV + currentClockCycle;
+        int scheduledTime = int(this->dag[to_string(currentPhase)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV + currentClockCycle;
 		while (schedule.count(scheduledTime) > 0) scheduledTime++;
 
 		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << "at time" << scheduledTime);
@@ -273,7 +275,7 @@ void MemoryController::update()
 		if (dataCyclesLeft == 0)
 		{
 			//inform upper levels that a write is done
-			if (parentMemorySystem->WriteDataDone!=NULL)
+			if (parentMemorySystem->WriteDataDone!=NULL && outgoingDataPacket)
 			{
 				(*parentMemorySystem->WriteDataDone)(parentMemorySystem->systemID,outgoingDataPacket->physicalAddress, currentClockCycle);
 			}
@@ -347,12 +349,12 @@ void MemoryController::update()
 	//function returns true if there is something valid in poppedBusPacket
 	if (commandQueue.pop(&poppedBusPacket))
 	{
-		if (poppedBusPacket->busPacketType == WRITE || poppedBusPacket->busPacketType == WRITE_P)
+		if (!poppedBusPacket->isFake && (poppedBusPacket->busPacketType == WRITE || poppedBusPacket->busPacketType == WRITE_P))
 		{
 
 			writeDataToSend.push_back(new BusPacket(DATA, poppedBusPacket->physicalAddress, poppedBusPacket->column,
 			                                    poppedBusPacket->row, poppedBusPacket->rank, poppedBusPacket->bank,
-			                                    poppedBusPacket->data, dramsim_log));
+			                                    poppedBusPacket->data, poppedBusPacket->isFake, dramsim_log));
 			writeDataCountdown.push_back(WL);
 		}
 
@@ -597,13 +599,13 @@ void MemoryController::update()
 				//create activate command to the row we just translated
 				BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
 						newTransactionColumn, newTransactionRow, newTransactionRank,
-						newTransactionBank, 0, dramsim_log);
+						newTransactionBank, 0, transaction->isFake, dramsim_log);
 
 				//create read or write command and enqueue it
 				BusPacketType bpType = transaction->getBusPacketType();
 				BusPacket *command = new BusPacket(bpType, transaction->address,
 						newTransactionColumn, newTransactionRow, newTransactionRank,
-						newTransactionBank, transaction->data, dramsim_log);
+						newTransactionBank, transaction->data, transaction->isFake, dramsim_log);
 
 
 
@@ -646,12 +648,20 @@ void MemoryController::update()
 				scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
 			} else {
 				scheduledBank = 0;
+				//TODO: Handle fixed rate writes!
 				// Schedule next fixedrate transaction while we're here!
 				schedule[currentClockCycle+fixedRate] = 0;
 			}
 
 			Transaction *transaction;
-			bool found = false;
+
+			Transaction *readTransaction;
+			bool readFound = false;
+
+			Transaction *writeTransaction;
+			bool writeFound = false;
+			int writeRequested = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["combinedWB"];
+
 			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 
 			// Search the defence queue for a match...
@@ -659,40 +669,68 @@ void MemoryController::update()
 				transaction = defenceQueue[i];
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
-				found = true;
+				// First we need to find a read
+				if (transaction->transactionType == DATA_READ && !readFound) {
+					readTransaction = transaction;
+					readFound = true;
+				} 
+				else if (transaction->transactionType == DATA_WRITE && !writeFound && writeRequested) {
+					writeTransaction = transaction;
+					writeFound = true;
+				}
+				else continue;
 
 				transaction->phaseID = currentPhase;
 				transaction->nodeID = scheduledNode;
 
 				defenceQueue.erase(defenceQueue.begin()+i);
 
-				break;
+				if (readFound && (writeFound || !writeRequested)) break;
 
 				/* MULTI-BANK
 				if (scheduledBank == newTransactionBank) {
 					transaction->phaseID = currentPhase;
 					transaction->nodeId = scheduledNode;
 
-					found = true;
+					readFound = true;
 					break;
 				}
 				*/
 			}
 
-			if (!found) {
-				if(DEBUG_DEFENCE) PRINT("No matching transaction, enqueuing fake request")
-				fakeRequestsThisPhase++;
+			if (!readFound) {
+				if(DEBUG_DEFENCE) PRINT("No matching read transaction, enqueuing fake request")
+				fakeReadRequestsThisPhase++;
 
-				transaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
+				readTransaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
 				newTransactionChan = 0;
 				newTransactionRank = 0;
 				newTransactionBank = scheduledBank;
 				newTransactionRow = 0;
 				newTransactionColumn = 0;
+
+				readTransaction->timeAdded = currentClockCycle;
+			} 
+			transactionQueue.push_back(readTransaction);
+
+
+			if(writeRequested) {
+				if (!writeFound) {
+					if(DEBUG_DEFENCE) PRINT("No matching write transaction, enqueuing fake request")
+					fakeWriteRequestsThisPhase++;
+
+					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
+					newTransactionChan = 0;
+					newTransactionRank = 0;
+					newTransactionBank = scheduledBank;
+					newTransactionRow = 0;
+					newTransactionColumn = 0;
+
+					writeTransaction->timeAdded = currentClockCycle;
+				}
+				transactionQueue.push_back(writeTransaction);
 			}
 
-			transaction->timeAdded = currentClockCycle;
-			transactionQueue.push_back(transaction);
 
 		}
 
@@ -748,13 +786,13 @@ void MemoryController::update()
 				//create activate command to the row we just translated
 				BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
 						newTransactionColumn, newTransactionRow, newTransactionRank,
-						newTransactionBank, 0, dramsim_log);
+						newTransactionBank, 0, transaction->isFake, dramsim_log);
 
 				//create read or write command and enqueue it
 				BusPacketType bpType = transaction->getBusPacketType();
 				BusPacket *command = new BusPacket(bpType, transaction->address,
 						newTransactionColumn, newTransactionRow, newTransactionRank,
-						newTransactionBank, transaction->data, dramsim_log);
+						newTransactionBank, transaction->data, transaction->isFake, dramsim_log);
 
 
 
@@ -855,13 +893,13 @@ void MemoryController::update()
 					//create activate command to the row we just translated
 					BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
 							newTransactionColumn, newTransactionRow, newTransactionRank,
-							newTransactionBank, 0, dramsim_log);
+							newTransactionBank, 0, transaction->isFake, dramsim_log);
 
 					//create read or write command and enqueue it
 					BusPacketType bpType = transaction->getBusPacketType();
 					BusPacket *command = new BusPacket(bpType, transaction->address,
 							newTransactionColumn, newTransactionRow, newTransactionRank,
-							newTransactionBank, transaction->data, dramsim_log);
+							newTransactionBank, transaction->data, transaction->isFake, dramsim_log);
 
 
 
@@ -1026,11 +1064,14 @@ void MemoryController::update()
 
 						int numNew = this->dag[to_string(currentPhase+1)]["node"].size();
 
-						if(DEBUG_DEFENCE) PRINT("Finished Phase: " << currentPhase << ". Fake requests issued: " << fakeRequestsThisPhase << " out of " << nodesThisPhase << " nodes.");
+						if(DEBUG_DEFENCE) PRINT("Finished Phase: " << currentPhase << ". Fake read requests issued: " << fakeReadRequestsThisPhase << " out of " << nodesThisPhase << " nodes.");
 						if(DEBUG_DEFENCE) PRINT("Starting new phase " << currentPhase+1);
 
-						totalFakeRequests += fakeRequestsThisPhase;
-						fakeRequestsThisPhase = 0;
+						totalFakeReadRequests += fakeReadRequestsThisPhase;
+						totalFakeWriteRequests += fakeWriteRequestsThisPhase;
+
+						fakeReadRequestsThisPhase = 0;
+						fakeWriteRequestsThisPhase = 0;
 						nodesThisPhase = 0;
 
 						for (auto& newNode : this->dag[to_string(currentPhase+1)]["node"].items()) {
@@ -1068,20 +1109,21 @@ void MemoryController::update()
 				}
 
 				if (protection == DAG && remainingInPhase == 0 && (currentPhase == this->dag.size()-1) && requestDefenceDone && !beginWait) {
-					totalFakeRequests += fakeRequestsThisPhase;
-					fakeRequestsThisPhase = 0;
+					totalFakeReadRequests += fakeReadRequestsThisPhase;
+					fakeReadRequestsThisPhase = 0;
+					fakeWriteRequestsThisPhase = 0;
 
 					if(DEBUG_DEFENCE) {
 						PRINT("Finished defence DAG, disabling defences!");
-						PRINT("Total Defence Nodes Executed: " << std::dec << totalNodes << ", Number of Fake Requests: " << totalFakeRequests);
+						PRINT("Total Defence Nodes Executed: " << std::dec << totalNodes << ", Number of Fake Read Requests: " << totalFakeReadRequests << " Fake Write Requests: " << totalFakeWriteRequests);
 					}
 
 					currentPhase = -1;
-                                        for (size_t i=0; i<defenceQueue.size(); i++) {
-                                               Transaction* transaction = defenceQueue[i];
-				               defenceQueue.erase(defenceQueue.begin()+i);
-                                               transactionQueue.push_back(transaction);
-                                        }
+                    for (size_t i=0; i<defenceQueue.size(); i++) {
+                        Transaction* transaction = defenceQueue[i];
+				        defenceQueue.erase(defenceQueue.begin()+i);
+                        transactionQueue.push_back(transaction);
+                    }
 				}
 				else if (protection == DAG && remainingInPhase == 0 && (currentPhase == this->dag.size()-1) && !fixedRateFallback && !beginWait) {
 					if(DEBUG_DEFENCE) PRINT("WARNING: Finished Defence DAG, falling back to fixed rate pattern!");

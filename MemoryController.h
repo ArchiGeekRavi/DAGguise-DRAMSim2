@@ -84,10 +84,13 @@ public:
 	int currentPhase;
 	int remainingInPhase;
 
-	int fakeRequestsThisPhase;
+	int fakeReadRequestsThisPhase;
+	int fakeWriteRequestsThisPhase;
 	int nodesThisPhase;
 
-	int totalFakeRequests;
+	int totalFakeReadRequests;
+	int totalFakeWriteRequests;
+
 	int totalNodes;
 
 	bool fixedRateFallback;
