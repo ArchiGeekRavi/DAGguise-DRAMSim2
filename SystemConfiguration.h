@@ -138,6 +138,7 @@ extern unsigned CMD_QUEUE_DEPTH;
 
 extern unsigned EPOCH_LENGTH;
 extern unsigned DEF_CLK_DIV;
+extern float SLACK;
 
 extern unsigned TOTAL_ROW_ACCESSES;
 

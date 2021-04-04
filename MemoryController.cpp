@@ -200,7 +200,7 @@ void MemoryController::scheduleInitialPhase()
 		nodesThisPhase++;
 		totalNodes++;
 
-        int scheduledTime = int(this->dag[to_string(currentPhase)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV + currentClockCycle;
+        int scheduledTime = (int(this->dag[to_string(currentPhase)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV)*SLACK + currentClockCycle;
 		while (schedule.count(scheduledTime) > 0) scheduledTime++;
 
 		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
@@ -1093,7 +1093,7 @@ void MemoryController::update()
 								assert(this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["sourceID"] == stoi(oldNode.key()));
 								assert(this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["destID"] == stoi(newNode.key()));
 
-								int edgeWeight = int(this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV;
+								int edgeWeight = SLACK*(int(this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["latency"]))/DEF_CLK_DIV;
 
 								int scheduledCandidate = edgeWeight + finishTimes[stoi(oldNode.key())];
 								if (scheduledCandidate > scheduledTime) {
