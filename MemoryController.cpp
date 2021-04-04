@@ -1059,6 +1059,7 @@ void MemoryController::update()
 					(/*pendingReadTransactions[i]->securityDomain == iDefenceDomain ||*/ pendingReadTransactions[i]->securityDomain == dDefenceDomain)) {
 					// Update phase information
 					finishTimes[pendingReadTransactions[i]->nodeID] = currentClockCycle;
+					PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << " at time " << dec << currentClockCycle);
 					remainingInPhase--;
 
 					if (remainingInPhase == 0 && currentPhase < (this->dag.size() - 1)) {
@@ -1228,7 +1229,7 @@ bool MemoryController::WillAcceptDefenceTransaction()
 //allows outside source to make request of memory system
 bool MemoryController::addTransaction(Transaction *trans)
 {
-	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain << " isWrite? " << (trans->transactionType == DATA_WRITE));
+	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain << " isWrite? " << (trans->transactionType == DATA_WRITE) << " Current Cycle: " << currentClockCycle);
 
 	if (trans->securityDomain == dDefenceDomain && currentPhase != -1) {
 		defenceQueue.push_back(trans);
