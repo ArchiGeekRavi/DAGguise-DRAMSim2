@@ -90,6 +90,7 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	totalNodes = 0;
 	totalFakeReadRequests = 0;
 	totalFakeWriteRequests = 0;
+	totalFRReadRequests = 0;
 
 	requestDefenceDone = false;
 	beginWait = true;
@@ -200,7 +201,9 @@ void MemoryController::scheduleInitialPhase()
 		nodesThisPhase++;
 		totalNodes++;
 
-        int scheduledTime = (int(this->dag[to_string(currentPhase)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV)*SLACK + currentClockCycle;
+                PRINT("Slack setting: " << SLACK);
+
+                int scheduledTime = (int(this->dag[to_string(currentPhase)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV)*SLACK + currentClockCycle;
 		while (schedule.count(scheduledTime) > 0) scheduledTime++;
 
 		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
@@ -648,6 +651,7 @@ void MemoryController::update()
 				scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
 			} else {
 				scheduledBank = 0;
+                                totalFRReadRequests++;
 				//TODO: Handle fixed rate writes!
 				// Schedule next fixedrate transaction while we're here!
 				schedule[currentClockCycle+fixedRate] = 0;
@@ -1276,7 +1280,7 @@ void MemoryController::resetStats()
 //prints statistics at the end of an epoch or  simulation
 void MemoryController::printStats(bool finalStats)
 {
-	unsigned myChannel = parentMemorySystem->systemID;
+	//unsigned myChannel = parentMemorySystem->systemID;
 
 	//if we are not at the end of the epoch, make sure to adjust for the actual number of cycles elapsed
 
@@ -1321,7 +1325,10 @@ void MemoryController::printStats(bool finalStats)
 	PRINTN( "   Total Return Transactions : " << totalTransactions );
 	PRINT( " ("<<totalBytesTransferred <<" bytes) aggregate average bandwidth "<<totalBandwidth<<"GB/s");
 
-	double totalAggregateBandwidth = 0.0;	
+        PRINT(" ========== Defence DAG Statistics ========== ");
+        PRINT(" Final Defence Nodes Executed: " << std::dec << totalNodes << ", Number of Fake Read Requests: " << totalFakeReadRequests << " Fake Write Requests: " << totalFakeWriteRequests << " Fixed Rate Read Requests: " << totalFRReadRequests);
+
+	/*double totalAggregateBandwidth = 0.0;	
 	for (size_t r=0;r<NUM_RANKS;r++)
 	{
 
@@ -1415,7 +1422,7 @@ void MemoryController::printStats(bool finalStats)
 	}
 
 
-	PRINT(endl<< " == Pending Transactions : "<<pendingReadTransactions.size()<<" ("<<currentClockCycle<<")==");
+	PRINT(endl<< " == Pending Transactions : "<<pendingReadTransactions.size()<<" ("<<currentClockCycle<<")=="); */
 	/*
 	for(size_t i=0;i<pendingReadTransactions.size();i++)
 		{

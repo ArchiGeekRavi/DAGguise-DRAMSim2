@@ -90,6 +90,7 @@ public:
 
 	int totalFakeReadRequests;
 	int totalFakeWriteRequests;
+	int totalFRReadRequests;
 
 	int totalNodes;
 
