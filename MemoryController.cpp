@@ -660,10 +660,10 @@ void MemoryController::update()
 			Transaction *transaction;
 
 			Transaction *readTransaction;
-			bool readFound = false;
+			int readID = -1;
 
 			Transaction *writeTransaction;
-			bool writeFound = false;
+			int writeID = -1;
 			int writeRequested;
 			
 			if (!fixedRateFallback) {
@@ -680,22 +680,24 @@ void MemoryController::update()
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
 				// First we need to find a read
-				if (transaction->transactionType == DATA_READ && !readFound) {
+				if (transaction->transactionType == DATA_READ && readID == -1) {
 					readTransaction = transaction;
-					readFound = true;
+					readID = i;
+                                        defenceQueue.erase(defenceQueue.begin()+readID);
+                                        i--;
 				} 
-				else if (transaction->transactionType == DATA_WRITE && !writeFound && writeRequested) {
+				else if (transaction->transactionType == DATA_WRITE && writeID == -1 && writeRequested) {
 					writeTransaction = transaction;
-					writeFound = true;
+					writeID = i;
+                                        defenceQueue.erase(defenceQueue.begin()+writeID);
+                                        i--;
 				}
 				else continue;
 
 				transaction->phaseID = currentPhase;
 				transaction->nodeID = scheduledNode;
 
-				defenceQueue.erase(defenceQueue.begin()+i);
-
-				if (readFound && (writeFound || !writeRequested)) break;
+				if ((readID != -1) && (writeID != -1 || !writeRequested)) break;
 
 				/* MULTI-BANK
 				if (scheduledBank == newTransactionBank) {
@@ -708,7 +710,7 @@ void MemoryController::update()
 				*/
 			}
 
-			if (!readFound) {
+			if (readID == -1) {
 				if(DEBUG_DEFENCE) PRINT("No matching read transaction, enqueuing fake request")
 				fakeReadRequestsThisPhase++;
 
@@ -725,7 +727,7 @@ void MemoryController::update()
 
 
 			if(writeRequested) {
-				if (!writeFound) {
+				if (writeID == -1) {
 					if(DEBUG_DEFENCE) PRINT("No matching write transaction, enqueuing fake request")
 					fakeWriteRequestsThisPhase++;
 
@@ -738,6 +740,7 @@ void MemoryController::update()
 
 					writeTransaction->timeAdded = currentClockCycle;
 				}
+
 				transactionQueue.push_back(writeTransaction);
 			}
 
@@ -1108,6 +1111,7 @@ void MemoryController::update()
 							}
 							j++;
 							// Avoid scheduling conflicts
+                                                        if (scheduledTime == currentClockCycle) scheduledTime++;
 							while (schedule.count(scheduledTime) > 0) scheduledTime++;
 							schedule[scheduledTime] = stoi(newNode.key());
 							if(DEBUG_DEFENCE) PRINT("Scheduled " << newNode.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
