@@ -573,6 +573,10 @@ void MemoryController::update()
 			// pass these in as references so they get set by the addressMapping function
 			addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
+                        //TODO: Convert back to multi-bank
+                        newTransactionBank = 0;
+                        newTransactionRank = 0;
+
 			//if we have room, break up the transaction into the appropriate commands
 			//and add them to the command queue
 			if (commandQueue.hasRoomFor(2, newTransactionRank, newTransactionBank))
@@ -860,13 +864,13 @@ void MemoryController::update()
 				// pass these in as references so they get set by the addressMapping function
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
-				if (transaction->securityDomain == currentDomain) {
+				if ((transaction->securityDomain)%NUM_DOMAINS == currentDomain) {
 					switch (protection) {
 						case FixedService_Rank:
-							newTransactionRank = transaction->securityDomain;
+							newTransactionRank = (transaction->securityDomain)%NUM_DOMAINS;
 							break;
 						case FixedService_Bank:
-							newTransactionBank = transaction->securityDomain;
+							newTransactionBank = (transaction->securityDomain)%NUM_DOMAINS;
 							newTransactionRank = 0;
 							break;
 						default:
@@ -889,7 +893,7 @@ void MemoryController::update()
 						{
 							PRINT(" (Write)");
 						}
-						PRINT("  Protection Domain  : " << transaction->securityDomain);
+						PRINT("  Protection Domain  : " << (transaction->securityDomain)%NUM_DOMAINS);
 						PRINT("  Rank : " << newTransactionRank);
 						PRINT("  Bank : " << newTransactionBank);
 						PRINT("  Row  : " << newTransactionRow);
@@ -1327,6 +1331,11 @@ void MemoryController::printStats(bool finalStats)
 
         PRINT(" ========== Defence DAG Statistics ========== ");
         PRINT(" Final Defence Nodes Executed: " << std::dec << totalNodes << ", Number of Fake Read Requests: " << totalFakeReadRequests << " Fake Write Requests: " << totalFakeWriteRequests << " Fixed Rate Read Requests: " << totalFRReadRequests);
+
+	if (finalStats && VIS_FILE_OUTPUT) {
+		csvOut.getOutputStream() << "\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nFake Write Requests: " << totalFakeWriteRequests << ",\nFixed Rate Read Requests: " << totalFRReadRequests;
+	}
+
 
 	/*double totalAggregateBandwidth = 0.0;	
 	for (size_t r=0;r<NUM_RANKS;r++)
