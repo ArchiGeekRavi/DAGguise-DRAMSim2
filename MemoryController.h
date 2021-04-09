@@ -90,7 +90,10 @@ public:
 
 	int totalFakeReadRequests;
 	int totalFakeWriteRequests;
-	int totalFRReadRequests;
+
+	int totalFRRequests;
+	int totalFakeFRReadRequests;
+        int totalFakeFRWriteRequests;
 
 	int totalNodes;
 

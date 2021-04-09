@@ -90,7 +90,10 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	totalNodes = 0;
 	totalFakeReadRequests = 0;
 	totalFakeWriteRequests = 0;
-	totalFRReadRequests = 0;
+
+	totalFRRequests = 0;
+        totalFakeFRReadRequests = 0;
+        totalFakeFRWriteRequests = 0;
 
 	requestDefenceDone = false;
 	beginWait = true;
@@ -204,6 +207,7 @@ void MemoryController::scheduleInitialPhase()
                 PRINT("Slack setting: " << SLACK);
 
                 int scheduledTime = (int(this->dag[to_string(currentPhase)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV)*SLACK + currentClockCycle;
+                if (scheduledTime == currentClockCycle) scheduledTime++;
 		while (schedule.count(scheduledTime) > 0) scheduledTime++;
 
 		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
@@ -655,7 +659,7 @@ void MemoryController::update()
 				scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
 			} else {
 				scheduledBank = 0;
-                                totalFRReadRequests++;
+                                totalFRRequests++;
 				//TODO: Handle fixed rate writes!
 				// Schedule next fixedrate transaction while we're here!
 				schedule[currentClockCycle+fixedRate] = 0;
@@ -716,7 +720,9 @@ void MemoryController::update()
 
 			if (readID == -1) {
 				if(DEBUG_DEFENCE) PRINT("No matching read transaction, enqueuing fake request")
-				fakeReadRequestsThisPhase++;
+
+				if(fixedRateFallback) totalFakeFRReadRequests++;
+                                else fakeReadRequestsThisPhase++;
 
 				readTransaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
 				newTransactionChan = 0;
@@ -733,7 +739,9 @@ void MemoryController::update()
 			if(writeRequested) {
 				if (writeID == -1) {
 					if(DEBUG_DEFENCE) PRINT("No matching write transaction, enqueuing fake request")
-					fakeWriteRequestsThisPhase++;
+                                        
+                                        if(fixedRateFallback) totalFakeFRWriteRequests++;
+                                        else fakeWriteRequestsThisPhase++;
 
 					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
 					newTransactionChan = 0;
@@ -1334,10 +1342,10 @@ void MemoryController::printStats(bool finalStats)
 	PRINT( " ("<<totalBytesTransferred <<" bytes) aggregate average bandwidth "<<totalBandwidth<<"GB/s");
 
         PRINT(" ========== Defence DAG Statistics ========== ");
-        PRINT(" Final Defence Nodes Executed: " << std::dec << totalNodes << ", Number of Fake Read Requests: " << totalFakeReadRequests << " Fake Write Requests: " << totalFakeWriteRequests << " Fixed Rate Read Requests: " << totalFRReadRequests);
+        PRINT("\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests << ",\nFixed Rate Requests: " << totalFRRequests << ",\nFixed Rate Fake Read Requests: " << totalFakeFRReadRequests << ",\nFixed Rate Fake Write Requests: " << totalFakeFRWriteRequests);
 
 	if (finalStats && VIS_FILE_OUTPUT) {
-		csvOut.getOutputStream() << "\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nFake Write Requests: " << totalFakeWriteRequests << ",\nFixed Rate Read Requests: " << totalFRReadRequests;
+		csvOut.getOutputStream() << "\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests << ",\nFixed Rate Requests: " << totalFRRequests << ",\nFixed Rate Fake Read Requests: " << totalFakeFRReadRequests << ",\nFixed Rate Fake Write Requests: " << totalFakeFRWriteRequests;
 	}
 
 
