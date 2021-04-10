@@ -159,6 +159,13 @@ void CommandQueue::enqueue(BusPacket *newBusPacket)
 	}
 }
 
+//Adds a command to appropriate queue
+void CommandQueue::setDefenceDomains(uint64_t iDomain, uint64_t dDomain)
+{
+	iDefenceDomain = iDomain;
+	dDefenceDomain = dDomain;
+}
+
 //Removes the next item from the command queue based on the system's
 //command scheduling policy
 bool CommandQueue::pop(BusPacket **busPacket)
@@ -285,15 +292,57 @@ bool CommandQueue::pop(BusPacket **busPacket)
 					}
 					else
 					{
-						if (isIssuable(queue[0]))
-						{
+						if (protection == FixedRate) {
+							if (isIssuable(queue[0]) && (queue[0]->busPacketType!=ACTIVATE || (BANK_PARTITION_CYCLES + currentClockCycle < nextFRClockCycle))) {
+								*busPacket = queue[0];
+								queue.erase(queue.begin());
+								foundIssuable = true;
+							} else if (currentClockCycle == nextFRClockCycle) {
+								//search from beginning to find fixed rate transaction
+								bool FRFound = false;
+								for (size_t i=0;i<queue.size();i++)
+								{
+									if (isIssuable(queue[i]) && (queue[i]->securityDomain == iDefenceDomain || queue[i]->securityDomain == dDefenceDomain))
+									{
+										//check to make sure we aren't removing a read/write that is paired with an activate
+										if (i>0 && queue[i-1]->busPacketType==ACTIVATE &&
+												queue[i-1]->physicalAddress == queue[i]->physicalAddress)
+											continue;
 
-							//no need to search because if the front can't be sent,
-							// then no chance something behind it can go instead
-							*busPacket = queue[0];
-							queue.erase(queue.begin());
-							foundIssuable = true;
+										*busPacket = queue[i];
+										queue.erase(queue.begin()+i);
+										foundIssuable = true;
+										break;
+									}
+								}
+
+								if (!FRFound) {
+									//create activate command to the row we just translated
+
+									//create read or write command and enqueue it
+									BusPacket *command = new BusPacket(READ_P, 0, 0, 0, nextRank, nextBank, 0, 1, dramsim_log);
+									queues[nextRank][nextBank].insert(queues[nextRank][nextBank].begin(), command);
+
+									BusPacket *activate = new BusPacket(ACTIVATE, 0, 0, 0, nextRank, nextBank, 0, 1, dramsim_log);
+									if (isIssuable(activate)) {
+										*busPacket = activate;
+										foundIssuable = true;
+									} else {
+										queues[nextRank][nextBank].insert(queues[nextRank][nextBank].begin(), activate);
+									}
+								}
+							}
+						} else{
+							if (isIssuable(queue[0])) {
+
+								//no need to search because if the front can't be sent,
+								// then no chance something behind it can go instead
+								*busPacket = queue[0];
+								queue.erase(queue.begin());
+								foundIssuable = true;
+							}
 						}
+						
 					}
 
 				}

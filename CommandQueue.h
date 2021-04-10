@@ -73,6 +73,8 @@ public:
 	void needRefresh(unsigned rank);
 	void print();
 	void update(); //SimulatorObject requirement
+
+	void setDefenceDomains(uint64_t iDomain, uint64_t dDomain);
 	vector<BusPacket *> &getCommandQueue(unsigned rank, unsigned bank);
 
 	//fields
@@ -95,6 +97,9 @@ private:
 	vector< vector<unsigned> > rowAccessCounters;
 
 	bool sendAct;
+
+	uint64_t iDefenceDomain;
+	uint64_t dDefenceDomain;
 };
 }
 

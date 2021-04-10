@@ -50,6 +50,8 @@ MultiChannelMemorySystem::MultiChannelMemorySystem(const string &deviceIniFilena
 	csvOut(new CSVWriter(visDataOut))
 {
 	currentClockCycle=0; 
+	nextFRClockCycle=0;
+
 	if (visFilename)
 		printf("CC VISFILENAME=%s\n",visFilename->c_str());
 
@@ -395,6 +397,9 @@ void MultiChannelMemorySystem::actual_update()
 
 
 	currentClockCycle++; 
+	if (currentClockCycle > nextFRClockCycle) {
+		nextFRClockCycle += FIXED_SERVICE_RATE;
+	}
 }
 unsigned MultiChannelMemorySystem::findChannelNumber(uint64_t addr)
 {
@@ -460,6 +465,8 @@ void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dD
 		if (DEBUG_DEFENCE) PRINT("IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
 
 		channels[0]->memoryController->initDefence();
+	} else if (protection == FixedRate) {
+		channels[0]->memoryController->initCQDefence(iDefenceDomain, dDefenceDomain);
 	}
 	 
 	return;

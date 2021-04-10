@@ -91,14 +91,6 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	totalFakeReadRequests = 0;
 	totalFakeWriteRequests = 0;
 
-	totalFRRequests = 0;
-        totalFakeFRReadRequests = 0;
-        totalFakeFRWriteRequests = 0;
-
-	requestDefenceDone = false;
-	beginWait = true;
-
-
 	//reserve memory for vectors
 	transactionQueue.reserve(TRANS_QUEUE_DEPTH);
 	defenceQueue.reserve(DEFENCE_QUEUE_DEPTH);
@@ -173,53 +165,35 @@ void MemoryController::initDefence()
 	/* Create bookkeeping maps for convenience */
 	currentPhase = 0;
 	remainingInPhase = 0;
-	requestDefenceDone = false;
-
-	fixedRateFallback = false;
-	beginWait = true;
 
 	fakeReadRequestsThisPhase = 0;
 	fakeWriteRequestsThisPhase = 0;
 	nodesThisPhase = 0;
 
-	//TODO: Make this dynamic!
-	fixedRate = 200;
+	PRINT("Slack setting: " << SLACK);
+	assert(SLACK < 1.01);
 
 	for (auto& node : this->dag[to_string(currentPhase)]["node"].items()) {
 		remainingInPhase++;
-		if(DEBUG_DEFENCE) PRINT("Initial seen node: " << node.key());
-	}
-
-	if(DEBUG_DEFENCE) PRINT("Starting initial phase!");
-}
-
-void MemoryController::scheduleInitialPhase()
-{
-	if(DEBUG_DEFENCE) PRINT("Scheduling initial phase nodes!");
-
-	assert (currentPhase == 0);
-	assert (beginWait == true);
-	int i = 0;
-	for (auto& node : this->dag[to_string(currentPhase)]["node"].items()) {
 		nodesThisPhase++;
 		totalNodes++;
 
-                PRINT("Slack setting: " << SLACK);
-
-                int scheduledTime = (int(this->dag[to_string(currentPhase)]["edge"][to_string(i)]["latency"])/DEF_CLK_DIV)*SLACK + currentClockCycle;
-                if (scheduledTime == currentClockCycle) scheduledTime++;
+		int scheduledTime = (int(this->dag[to_string(currentPhase)]["edge"][to_string(0)]["latency"])/DEF_CLK_DIV)*SLACK + currentClockCycle;
+		
+		if (scheduledTime == currentClockCycle) scheduledTime++;
 		while (schedule.count(scheduledTime) > 0) scheduledTime++;
 
 		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
 		schedule[scheduledTime] = stoi(node.key());
 	}
-	beginWait = false;
+
+	if(DEBUG_DEFENCE) PRINT("Starting initial phase!");
 }
 
 void MemoryController::stopDefence()
 {
-	if(DEBUG_DEFENCE) PRINT("Sending stop defence request!");
-	requestDefenceDone = true; 
+	PRINT("Stopping Defence Deprecated!");
+	exit(-1);
 }
 
 //memory controller update
@@ -652,19 +626,12 @@ void MemoryController::update()
 		int scheduledBank = -1;
 		int scheduledNode;
 
-		if (beginWait == false && currentPhase != -1 && schedule.count(currentClockCycle)) {
+		if (currentPhase != -1 && schedule.count(currentClockCycle)) {
 			// Determine the scheduled defence node's information
 			scheduledNode = schedule[currentClockCycle];
-			if (!fixedRateFallback) {
-				scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
-			} else {
-				scheduledBank = 0;
-                                totalFRRequests++;
-				//TODO: Handle fixed rate writes!
-				// Schedule next fixedrate transaction while we're here!
-				schedule[currentClockCycle+fixedRate] = 0;
-			}
-
+			
+			scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
+			
 			Transaction *transaction;
 
 			Transaction *readTransaction;
@@ -672,14 +639,9 @@ void MemoryController::update()
 
 			Transaction *writeTransaction;
 			int writeID = -1;
-			int writeRequested;
-			
-			if (!fixedRateFallback) {
-				writeRequested = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["combinedWB"];
-			} else {
-				writeRequested = 1;
-			}
 
+			int writeRequested = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["combinedWB"];
+			
 			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 
 			// Search the defence queue for a match...
@@ -691,14 +653,14 @@ void MemoryController::update()
 				if (transaction->transactionType == DATA_READ && readID == -1) {
 					readTransaction = transaction;
 					readID = i;
-                                        defenceQueue.erase(defenceQueue.begin()+readID);
-                                        i--;
+                    defenceQueue.erase(defenceQueue.begin()+readID);
+                    i--;
 				} 
 				else if (transaction->transactionType == DATA_WRITE && writeID == -1 && writeRequested) {
 					writeTransaction = transaction;
 					writeID = i;
-                                        defenceQueue.erase(defenceQueue.begin()+writeID);
-                                        i--;
+                	defenceQueue.erase(defenceQueue.begin()+writeID);
+                    i--;
 				}
 				else continue;
 
@@ -721,8 +683,7 @@ void MemoryController::update()
 			if (readID == -1) {
 				if(DEBUG_DEFENCE) PRINT("No matching read transaction, enqueuing fake request")
 
-				if(fixedRateFallback) totalFakeFRReadRequests++;
-                                else fakeReadRequestsThisPhase++;
+                fakeReadRequestsThisPhase++;
 
 				readTransaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
 				newTransactionChan = 0;
@@ -740,8 +701,7 @@ void MemoryController::update()
 				if (writeID == -1) {
 					if(DEBUG_DEFENCE) PRINT("No matching write transaction, enqueuing fake request")
                                         
-                                        if(fixedRateFallback) totalFakeFRWriteRequests++;
-                                        else fakeWriteRequestsThisPhase++;
+                    fakeWriteRequestsThisPhase++;
 
 					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
 					newTransactionChan = 0;
@@ -818,8 +778,6 @@ void MemoryController::update()
 				BusPacket *command = new BusPacket(bpType, transaction->address,
 						newTransactionColumn, newTransactionRow, newTransactionRank,
 						newTransactionBank, transaction->data, transaction->isFake, dramsim_log);
-
-
 
 				commandQueue.enqueue(ACTcommand);
 				commandQueue.enqueue(command);
@@ -1074,7 +1032,7 @@ void MemoryController::update()
 					returnReadData(pendingReadTransactions[i]);
 				}
 
-				if (protection == DAG && !fixedRateFallback && currentPhase != -1 && !beginWait &&
+				if (protection == DAG && currentPhase != -1 &&
 					(/*pendingReadTransactions[i]->securityDomain == iDefenceDomain ||*/ pendingReadTransactions[i]->securityDomain == dDefenceDomain)) {
 					// Update phase information
 					finishTimes[pendingReadTransactions[i]->nodeID] = currentClockCycle;
@@ -1088,10 +1046,10 @@ void MemoryController::update()
 						int i = 0;
 						int j = 0;
 
-						int numNew = this->dag[to_string(currentPhase+1)]["node"].size();
+						int numNew = this->dag[to_string((currentPhase+1)%totalPhases)]["node"].size();
 
 						if(DEBUG_DEFENCE) PRINT("Finished Phase: " << currentPhase << ". Fake read requests issued: " << fakeReadRequestsThisPhase << " out of " << nodesThisPhase << " nodes.");
-						if(DEBUG_DEFENCE) PRINT("==== Starting new phase " << currentPhase+1 << " ====");
+						if(DEBUG_DEFENCE) PRINT("==== Starting new phase " << ((currentPhase+1)%totalPhases) << " ====");
 
 						totalFakeReadRequests += fakeReadRequestsThisPhase;
 						totalFakeWriteRequests += fakeWriteRequestsThisPhase;
@@ -1100,7 +1058,7 @@ void MemoryController::update()
 						fakeWriteRequestsThisPhase = 0;
 						nodesThisPhase = 0;
 
-						for (auto& newNode : this->dag[to_string(currentPhase+1)]["node"].items()) {
+						for (auto& newNode : this->dag[to_string((currentPhase+1)%totalPhases)]["node"].items()) {
 							remainingInPhase++;
 							nodesThisPhase++;
 							totalNodes++;
@@ -1109,10 +1067,10 @@ void MemoryController::update()
 
 							i = j;
 							for (auto& oldNode : this->dag[to_string(currentPhase)]["node"].items()) {
-								assert(this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["sourceID"] == stoi(oldNode.key()));
-								assert(this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["destID"] == stoi(newNode.key()));
+								assert(this->dag[to_string((currentPhase+1)%totalPhases)]["edge"][to_string(i)]["sourceID"] == stoi(oldNode.key()));
+								assert(this->dag[to_string((currentPhase+1)%totalPhases)]["edge"][to_string(i)]["destID"] == stoi(newNode.key()));
 
-								int edgeWeight = SLACK*(int(this->dag[to_string(currentPhase+1)]["edge"][to_string(i)]["latency"]))/DEF_CLK_DIV;
+								int edgeWeight = SLACK*(int(this->dag[to_string((currentPhase+1)%totalPhases)]["edge"][to_string(i)]["latency"]))/DEF_CLK_DIV;
 
 								int scheduledCandidate = edgeWeight + finishTimes[stoi(oldNode.key())];
 								if (scheduledCandidate > scheduledTime) {
@@ -1123,19 +1081,19 @@ void MemoryController::update()
 							}
 							j++;
 							// Avoid scheduling conflicts
-                                                        if (scheduledTime == currentClockCycle) scheduledTime++;
+                            if (scheduledTime == currentClockCycle) scheduledTime++;
 							while (schedule.count(scheduledTime) > 0) scheduledTime++;
 							schedule[scheduledTime] = stoi(newNode.key());
 							if(DEBUG_DEFENCE) PRINT("Scheduled " << newNode.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
 						}
 
-						currentPhase++;
+						currentPhase = (currentPhase + 1)%totalPhases;
 
 					}
 
 				}
 
-				if (protection == DAG && remainingInPhase == 0 && (currentPhase == this->dag.size()-1) && requestDefenceDone && !beginWait) {
+				/*if (protection == DAG && remainingInPhase == 0 && (currentPhase == this->dag.size()-1) && requestDefenceDone && !beginWait) {
 					totalFakeReadRequests += fakeReadRequestsThisPhase;
 					fakeReadRequestsThisPhase = 0;
 					fakeWriteRequestsThisPhase = 0;
@@ -1156,7 +1114,7 @@ void MemoryController::update()
 					if(DEBUG_DEFENCE) PRINT("WARNING: Finished Defence DAG, falling back to fixed rate pattern!");
 					fixedRateFallback = true;
 					schedule[currentClockCycle+fixedRate] = 0;
-				}
+				}*/
 
 
 				delete pendingReadTransactions[i];
@@ -1253,10 +1211,6 @@ bool MemoryController::addTransaction(Transaction *trans)
 
 	if (trans->securityDomain == dDefenceDomain && currentPhase != -1) {
 		defenceQueue.push_back(trans);
-
-		if (beginWait == true) {
-			scheduleInitialPhase();
-		}
 		return true;
 	}
 
@@ -1341,115 +1295,13 @@ void MemoryController::printStats(bool finalStats)
 	PRINTN( "   Total Return Transactions : " << totalTransactions );
 	PRINT( " ("<<totalBytesTransferred <<" bytes) aggregate average bandwidth "<<totalBandwidth<<"GB/s");
 
-        PRINT(" ========== Defence DAG Statistics ========== ");
-        PRINT("\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests << ",\nFixed Rate Requests: " << totalFRRequests << ",\nFixed Rate Fake Read Requests: " << totalFakeFRReadRequests << ",\nFixed Rate Fake Write Requests: " << totalFakeFRWriteRequests);
+	PRINT(" ========== Defence DAG Statistics ========== ");
+	PRINT("\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests);
 
 	if (finalStats && VIS_FILE_OUTPUT) {
-		csvOut.getOutputStream() << "\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests << ",\nFixed Rate Requests: " << totalFRRequests << ",\nFixed Rate Fake Read Requests: " << totalFakeFRReadRequests << ",\nFixed Rate Fake Write Requests: " << totalFakeFRWriteRequests;
+		csvOut.getOutputStream() << "\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests;
 	}
 
-
-	/*double totalAggregateBandwidth = 0.0;	
-	for (size_t r=0;r<NUM_RANKS;r++)
-	{
-
-		PRINT( "      -Rank   "<<r<<" : ");
-		PRINTN( "        -Reads  : " << totalReadsPerRank[r]);
-		PRINT( " ("<<totalReadsPerRank[r] * bytesPerTransaction<<" bytes)");
-		PRINTN( "        -Writes : " << totalWritesPerRank[r]);
-		PRINT( " ("<<totalWritesPerRank[r] * bytesPerTransaction<<" bytes)");
-		for (size_t j=0;j<NUM_BANKS;j++)
-		{
-			PRINT( "        -Bandwidth / Latency  (Bank " <<j<<"): " <<bandwidth[SEQUENTIAL(r,j)] << " GB/s\t\t" <<averageLatency[SEQUENTIAL(r,j)] << " ns");
-		}
-
-		// factor of 1000 at the end is to account for the fact that totalEnergy is accumulated in mJ since IDD values are given in mA
-		backgroundPower[r] = ((double)backgroundEnergy[r] / (double)(cyclesElapsed)) * Vdd / 1000.0;
-		burstPower[r] = ((double)burstEnergy[r] / (double)(cyclesElapsed)) * Vdd / 1000.0;
-		refreshPower[r] = ((double) refreshEnergy[r] / (double)(cyclesElapsed)) * Vdd / 1000.0;
-		actprePower[r] = ((double)actpreEnergy[r] / (double)(cyclesElapsed)) * Vdd / 1000.0;
-		averagePower[r] = ((backgroundEnergy[r] + burstEnergy[r] + refreshEnergy[r] + actpreEnergy[r]) / (double)cyclesElapsed) * Vdd / 1000.0;
-
-		if ((*parentMemorySystem->ReportPower)!=NULL)
-		{
-			(*parentMemorySystem->ReportPower)(backgroundPower[r],burstPower[r],refreshPower[r],actprePower[r]);
-		}
-
-		PRINT( " == Power Data for Rank        " << r );
-		PRINT( "   Average Power (watts)     : " << averagePower[r] );
-		PRINT( "     -Background (watts)     : " << backgroundPower[r] );
-		PRINT( "     -Act/Pre    (watts)     : " << actprePower[r] );
-		PRINT( "     -Burst      (watts)     : " << burstPower[r]);
-		PRINT( "     -Refresh    (watts)     : " << refreshPower[r] );
-
-		if (VIS_FILE_OUTPUT)
-		{
-		//	cout << "c="<<myChannel<< " r="<<r<<"writing to csv out on cycle "<< currentClockCycle<<endl;
-			// write the vis file output
-			csvOut << CSVWriter::IndexedName("Background_Power",myChannel,r) <<backgroundPower[r];
-			csvOut << CSVWriter::IndexedName("ACT_PRE_Power",myChannel,r) << actprePower[r];
-			csvOut << CSVWriter::IndexedName("Burst_Power",myChannel,r) << burstPower[r];
-			csvOut << CSVWriter::IndexedName("Refresh_Power",myChannel,r) << refreshPower[r];
-			double totalRankBandwidth=0.0;
-			for (size_t b=0; b<NUM_BANKS; b++)
-			{
-				csvOut << CSVWriter::IndexedName("Bandwidth",myChannel,r,b) << bandwidth[SEQUENTIAL(r,b)];
-				totalRankBandwidth += bandwidth[SEQUENTIAL(r,b)];
-				totalAggregateBandwidth += bandwidth[SEQUENTIAL(r,b)];
-				csvOut << CSVWriter::IndexedName("Average_Latency",myChannel,r,b) << averageLatency[SEQUENTIAL(r,b)];
-			}
-			csvOut << CSVWriter::IndexedName("Rank_Aggregate_Bandwidth",myChannel,r) << totalRankBandwidth; 
-			csvOut << CSVWriter::IndexedName("Rank_Average_Bandwidth",myChannel,r) << totalRankBandwidth/NUM_RANKS; 
-		}
-	}
-	if (VIS_FILE_OUTPUT)
-	{
-		csvOut << CSVWriter::IndexedName("Aggregate_Bandwidth",myChannel) << totalAggregateBandwidth;
-		csvOut << CSVWriter::IndexedName("Average_Bandwidth",myChannel) << totalAggregateBandwidth / (NUM_RANKS*NUM_BANKS);
-	}
-
-	// only print the latency histogram at the end of the simulation since it clogs the output too much to print every epoch
-	if (finalStats)
-	{
-		PRINT( " ---  Latency list ("<<latencies.size()<<")");
-		PRINT( "       [lat] : #");
-		if (VIS_FILE_OUTPUT)
-		{
-			csvOut.getOutputStream() << "!!HISTOGRAM_DATA"<<endl;
-		}
-
-		map<unsigned,unsigned>::iterator it; //
-		for (it=latencies.begin(); it!=latencies.end(); it++)
-		{
-			PRINT( "       ["<< it->first <<"-"<<it->first+(HISTOGRAM_BIN_SIZE-1)<<"] : "<< it->second );
-			if (VIS_FILE_OUTPUT)
-			{
-				csvOut.getOutputStream() << it->first <<"="<< it->second << endl;
-			}
-		}
-		if (currentClockCycle % EPOCH_LENGTH == 0)
-		{
-			PRINT( " --- Grand Total Bank usage list");
-			for (size_t i=0;i<NUM_RANKS;i++)
-			{
-				PRINT("Rank "<<i<<":"); 
-				for (size_t j=0;j<NUM_BANKS;j++)
-				{
-					PRINT( "  b"<<j<<": "<<grandTotalBankAccesses[SEQUENTIAL(i,j)]);
-				}
-			}
-		}
-
-	}
-
-
-	PRINT(endl<< " == Pending Transactions : "<<pendingReadTransactions.size()<<" ("<<currentClockCycle<<")=="); */
-	/*
-	for(size_t i=0;i<pendingReadTransactions.size();i++)
-		{
-			PRINT( i << "] I've been waiting for "<<currentClockCycle-pendingReadTransactions[i].timeAdded<<endl;
-		}
-	*/
 #ifdef LOG_OUTPUT
 	dramsim_log.flush();
 #endif

@@ -135,6 +135,8 @@ extern unsigned JEDEC_DATA_BUS_BITS;
 extern unsigned TRANS_QUEUE_DEPTH;
 extern unsigned DEFENCE_QUEUE_DEPTH;
 extern unsigned CMD_QUEUE_DEPTH;
+extern unsigned BANK_PARTITION_CYCLES;
+extern unsigned FIXED_SERVICE_RATE;
 
 extern unsigned EPOCH_LENGTH;
 extern unsigned DEF_CLK_DIV;
@@ -194,6 +196,7 @@ enum Protection
 	FixedService_Rank,
 	FixedService_Channel,
 	FixedService_BTA,
+	FixedRate,
 	DAG
 };
 

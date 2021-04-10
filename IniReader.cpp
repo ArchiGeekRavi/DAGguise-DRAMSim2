@@ -104,6 +104,9 @@ unsigned TRANS_QUEUE_DEPTH;
 unsigned DEFENCE_QUEUE_DEPTH;
 unsigned CMD_QUEUE_DEPTH;
 
+unsigned BANK_PARTITION_CYCLES;
+unsigned FIXED_SERVICE_RATE;
+
 //cycles within an epoch
 unsigned EPOCH_LENGTH;
 
@@ -197,6 +200,8 @@ static ConfigMap configMap[] =
 	DEFINE_UINT_PARAM(TRANS_QUEUE_DEPTH,SYS_PARAM),
 	DEFINE_UINT_PARAM(DEFENCE_QUEUE_DEPTH,SYS_PARAM),
 	DEFINE_UINT_PARAM(CMD_QUEUE_DEPTH,SYS_PARAM),
+	DEFINE_UINT_PARAM(BANK_PARTITION_CYCLES,SYS_PARAM),
+	DEFINE_UINT_PARAM(FIXED_SERVICE_RATE,SYS_PARAM),
 
 	DEFINE_UINT_PARAM(EPOCH_LENGTH,SYS_PARAM),
 	DEFINE_UINT_PARAM(DEF_CLK_DIV,SYS_PARAM),
@@ -657,6 +662,10 @@ void IniReader::InitEnumsFromStrings()
 	else if (PROTECTION == "dag")
 	{
 		protection = DAG;
+	}
+	else if (PROTECTION == "fr")
+	{
+		protection = FixedRate;
 	}
 
 	if (SCHEDULING_POLICY == "rank_then_bank_round_robin")

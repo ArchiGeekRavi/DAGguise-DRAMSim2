@@ -77,12 +77,17 @@ public:
 	void resetStats(); 
 	void initDefence();
 	void stopDefence();
-	void scheduleInitialPhase();
+
+	void initCQDefence(uint64_t iDomain, uint64_t dDomain) {
+		iDefenceDomain = iDomain;
+		dDefenceDomain = dDomain;
+	}
 
 	map<int, uint64_t> finishTimes;
 	map<uint64_t, int> schedule;
 	int currentPhase;
 	int remainingInPhase;
+	int totalPhases;
 
 	int fakeReadRequestsThisPhase;
 	int fakeWriteRequestsThisPhase;
@@ -91,16 +96,7 @@ public:
 	int totalFakeReadRequests;
 	int totalFakeWriteRequests;
 
-	int totalFRRequests;
-	int totalFakeFRReadRequests;
-        int totalFakeFRWriteRequests;
-
 	int totalNodes;
-
-	bool fixedRateFallback;
-	bool beginWait;
-	int fixedRate;
-	bool requestDefenceDone;
 
 	//fields
 	vector<Transaction *> transactionQueue;
@@ -117,7 +113,6 @@ private:
 
 	//fields
 	MemorySystem *parentMemorySystem;
-
 	CommandQueue commandQueue;
 	BusPacket *poppedBusPacket;
 	vector<unsigned>refreshCountdown;

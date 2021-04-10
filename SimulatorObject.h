@@ -51,6 +51,7 @@ class SimulatorObject
 {
 public:
 	uint64_t currentClockCycle;
+	uint64_t nextFRClockCycle;
 
 	void step();
 	virtual void update()=0;
