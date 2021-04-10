@@ -81,6 +81,9 @@ public:
 	
 	BusPacket3D queues; // 3D array of BusPacket pointers
 	vector< vector<BankState> > &bankStates;
+	
+        uint64_t iDefenceDomain;
+	uint64_t dDefenceDomain;
 private:
 	void nextRankAndBank(unsigned &rank, unsigned &bank);
 	//fields
@@ -98,8 +101,6 @@ private:
 
 	bool sendAct;
 
-	uint64_t iDefenceDomain;
-	uint64_t dDefenceDomain;
 };
 }
 

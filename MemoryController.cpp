@@ -342,7 +342,7 @@ void MemoryController::update()
 
 			writeDataToSend.push_back(new BusPacket(DATA, poppedBusPacket->physicalAddress, poppedBusPacket->column,
 			                                    poppedBusPacket->row, poppedBusPacket->rank, poppedBusPacket->bank,
-			                                    poppedBusPacket->data, poppedBusPacket->isFake, dramsim_log));
+			                                    poppedBusPacket->data, poppedBusPacket->isFake, poppedBusPacket->securityDomain, dramsim_log));
 			writeDataCountdown.push_back(WL);
 		}
 
@@ -581,6 +581,8 @@ void MemoryController::update()
 					PRINT("  Bank : " << newTransactionBank);
 					PRINT("  Row  : " << newTransactionRow);
 					PRINT("  Col  : " << newTransactionColumn);
+					PRINT("  Domain  : " << transaction->securityDomain);
+					PRINT("  Time  : " << currentClockCycle);
 				}
 
 
@@ -591,13 +593,13 @@ void MemoryController::update()
 				//create activate command to the row we just translated
 				BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
 						newTransactionColumn, newTransactionRow, newTransactionRank,
-						newTransactionBank, 0, transaction->isFake, dramsim_log);
+						newTransactionBank, 0, transaction->isFake, transaction->securityDomain, dramsim_log);
 
 				//create read or write command and enqueue it
 				BusPacketType bpType = transaction->getBusPacketType();
 				BusPacket *command = new BusPacket(bpType, transaction->address,
 						newTransactionColumn, newTransactionRow, newTransactionRank,
-						newTransactionBank, transaction->data, transaction->isFake, dramsim_log);
+						newTransactionBank, transaction->data, transaction->isFake, transaction->securityDomain, dramsim_log);
 
 
 
@@ -778,13 +780,13 @@ void MemoryController::update()
 				//create activate command to the row we just translated
 				BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
 						newTransactionColumn, newTransactionRow, newTransactionRank,
-						newTransactionBank, 0, transaction->isFake, dramsim_log);
+						newTransactionBank, 0, transaction->isFake, transaction->securityDomain, dramsim_log);
 
 				//create read or write command and enqueue it
 				BusPacketType bpType = transaction->getBusPacketType();
 				BusPacket *command = new BusPacket(bpType, transaction->address,
 						newTransactionColumn, newTransactionRow, newTransactionRank,
-						newTransactionBank, transaction->data, transaction->isFake, dramsim_log);
+						newTransactionBank, transaction->data, transaction->isFake, transaction->securityDomain, dramsim_log);
 
 				commandQueue.enqueue(ACTcommand);
 				commandQueue.enqueue(command);
@@ -883,13 +885,13 @@ void MemoryController::update()
 					//create activate command to the row we just translated
 					BusPacket *ACTcommand = new BusPacket(ACTIVATE, transaction->address,
 							newTransactionColumn, newTransactionRow, newTransactionRank,
-							newTransactionBank, 0, transaction->isFake, dramsim_log);
+							newTransactionBank, 0, transaction->isFake, transaction->securityDomain, dramsim_log);
 
 					//create read or write command and enqueue it
 					BusPacketType bpType = transaction->getBusPacketType();
 					BusPacket *command = new BusPacket(bpType, transaction->address,
 							newTransactionColumn, newTransactionRow, newTransactionRank,
-							newTransactionBank, transaction->data, transaction->isFake, dramsim_log);
+							newTransactionBank, transaction->data, transaction->isFake, transaction->securityDomain, dramsim_log);
 
 
 

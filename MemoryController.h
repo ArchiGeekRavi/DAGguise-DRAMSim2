@@ -79,8 +79,8 @@ public:
 	void stopDefence();
 
 	void initCQDefence(uint64_t iDomain, uint64_t dDomain) {
-		iDefenceDomain = iDomain;
-		dDefenceDomain = dDomain;
+		commandQueue.iDefenceDomain = iDomain;
+		commandQueue.dDefenceDomain = dDomain;
 	}
 
 	map<int, uint64_t> finishTimes;

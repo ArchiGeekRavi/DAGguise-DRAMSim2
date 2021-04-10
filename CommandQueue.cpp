@@ -250,7 +250,7 @@ bool CommandQueue::pop(BusPacket **busPacket)
 			//	reset flags and rank pointer
 			if (!foundActiveOrTooEarly && bankStates[refreshRank][0].currentBankState != PowerDown)
 			{
-				*busPacket = new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, false, dramsim_log);
+				*busPacket = new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, false, 0, dramsim_log);
 				refreshRank = -1;
 				refreshWaiting = false;
 				sendingREF = true;
@@ -299,9 +299,8 @@ bool CommandQueue::pop(BusPacket **busPacket)
 					{
                                                 PRINT("TEST0" << BANK_PARTITION_CYCLES << "/" << currentClockCycle << "\n");
 						if (protection == FixedRate) {
-                                                        if (!queue.empty())
-                                                          PRINT("EMPTY" << queue.empty() << "ISSUABLE" << isIssuable(queue[0]) << "QUEUE0 ACTIVATE" << (queue[0]->busPacketType!=ACTIVATE) << "WAIT" << (currentClockCycle < nextFRClockCycle) << "\n");
-							if (!queue.empty() && isIssuable(queue[0]) && (queue[0]->busPacketType!=ACTIVATE || (BANK_PARTITION_CYCLES + currentClockCycle < nextFRClockCycle))) {
+							if (!queue.empty() && isIssuable(queue[0]) && (queue[0]->busPacketType!=ACTIVATE || (BANK_PARTITION_CYCLES + currentClockCycle < nextFRClockCycle)) && !(queue[0]->securityDomain == iDefenceDomain || queue[0]->securityDomain == dDefenceDomain)) {
+                                                                PRINT("ELEM SD: " << queue[0]->securityDomain << "idom" << iDefenceDomain << "ddom" << dDefenceDomain);
 								*busPacket = queue[0];
 								queue.erase(queue.begin());
 								foundIssuable = true;
@@ -330,10 +329,10 @@ bool CommandQueue::pop(BusPacket **busPacket)
                                                                         PRINT("TEST3\n");
 
 									//create read or write command and enqueue it
-									BusPacket *command = new BusPacket(WRITE_P, 0, 0, 0, nextRank, nextBank, 0, 1, dramsim_log);
+									BusPacket *command = new BusPacket(WRITE_P, 0, 0, 0, nextRank, nextBank, 0, 1, 0, dramsim_log);
 									queues[nextRank][nextBank].insert(queues[nextRank][nextBank].begin(), command);
 
-									BusPacket *activate = new BusPacket(ACTIVATE, 0, 0, 0, nextRank, nextBank, 0, 1, dramsim_log);
+									BusPacket *activate = new BusPacket(ACTIVATE, 0, 0, 0, nextRank, nextBank, 0, 1, 0, dramsim_log);
 
                                                                         PRINT("IDLE? " << (bankStates[0][0].currentBankState == Idle));
                                                                         PRINT("REF? " << (bankStates[0][0].currentBankState == Refreshing));
@@ -440,7 +439,7 @@ bool CommandQueue::pop(BusPacket **busPacket)
 					if (closeRow && currentClockCycle >= bankStates[refreshRank][b].nextPrecharge)
 					{
 						rowAccessCounters[refreshRank][b]=0;
-						*busPacket = new BusPacket(PRECHARGE, 0, 0, 0, refreshRank, b, 0, false, dramsim_log);
+						*busPacket = new BusPacket(PRECHARGE, 0, 0, 0, refreshRank, b, 0, false, 0, dramsim_log);
 						sendingREForPRE = true;
 					}
 					break;
@@ -459,7 +458,7 @@ bool CommandQueue::pop(BusPacket **busPacket)
 			//	reset flags and rank pointer
 			if (sendREF && bankStates[refreshRank][0].currentBankState != PowerDown)
 			{
-				*busPacket = new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, false, dramsim_log);
+				*busPacket = new BusPacket(REFRESH, 0, 0, 0, refreshRank, 0, 0, false, 0, dramsim_log);
 				refreshRank = -1;
 				refreshWaiting = false;
 				sendingREForPRE = true;
@@ -581,7 +580,7 @@ bool CommandQueue::pop(BusPacket **busPacket)
 							{
 								sendingPRE = true;
 								rowAccessCounters[nextRankPRE][nextBankPRE] = 0;
-								*busPacket = new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE, 0, false, dramsim_log);
+								*busPacket = new BusPacket(PRECHARGE, 0, 0, 0, nextRankPRE, nextBankPRE, 0, false, 0, dramsim_log);
 								break;
 							}
 						}
