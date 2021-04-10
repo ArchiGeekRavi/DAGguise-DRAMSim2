@@ -170,6 +170,8 @@ void MemoryController::initDefence()
 	fakeWriteRequestsThisPhase = 0;
 	nodesThisPhase = 0;
 
+        totalPhases = this->dag.size();
+
 	PRINT("Slack setting: " << SLACK);
 	assert(SLACK < 1.01);
 
@@ -200,7 +202,12 @@ void MemoryController::stopDefence()
 void MemoryController::update()
 {
 
-	//PRINT(" ------------------------- [" << currentClockCycle << "] -------------------------");
+	PRINT(" ------------------------- [" << currentClockCycle << "/" << nextFRClockCycle << "] -------------------------");
+
+	if (currentClockCycle > nextFRClockCycle) {
+		nextFRClockCycle += FIXED_SERVICE_RATE;
+                commandQueue.nextFRClockCycle += FIXED_SERVICE_RATE;
+	}
 
 	//update bank states
 	for (size_t i=0;i<NUM_RANKS;i++)
@@ -536,7 +543,7 @@ void MemoryController::update()
 
 	}
 
-	if (protection == Regular || protection == FixedService_Channel) {
+	if (protection == Regular || protection == FixedService_Channel || protection == FixedRate) {
 		for (size_t i=0;i<transactionQueue.size();i++)
 		{
 			//pop off top transaction from queue
@@ -1039,7 +1046,7 @@ void MemoryController::update()
 					PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << " at time " << dec << currentClockCycle);
 					remainingInPhase--;
 
-					if (remainingInPhase == 0 && currentPhase < (this->dag.size() - 1)) {
+					if (remainingInPhase == 0) {
 						// We're done with this phase! Schedule the next.
 						// First, schedule the next nodes
 						
@@ -1081,7 +1088,7 @@ void MemoryController::update()
 							}
 							j++;
 							// Avoid scheduling conflicts
-                            if (scheduledTime == currentClockCycle) scheduledTime++;
+                                                        if (scheduledTime == currentClockCycle) scheduledTime++;
 							while (schedule.count(scheduledTime) > 0) scheduledTime++;
 							schedule[scheduledTime] = stoi(newNode.key());
 							if(DEBUG_DEFENCE) PRINT("Scheduled " << newNode.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");

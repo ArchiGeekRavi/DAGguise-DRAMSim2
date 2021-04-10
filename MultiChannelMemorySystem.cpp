@@ -397,9 +397,6 @@ void MultiChannelMemorySystem::actual_update()
 
 
 	currentClockCycle++; 
-	if (currentClockCycle > nextFRClockCycle) {
-		nextFRClockCycle += FIXED_SERVICE_RATE;
-	}
 }
 unsigned MultiChannelMemorySystem::findChannelNumber(uint64_t addr)
 {
