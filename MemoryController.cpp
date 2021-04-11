@@ -202,7 +202,7 @@ void MemoryController::stopDefence()
 void MemoryController::update()
 {
 
-	PRINT(" ------------------------- [" << currentClockCycle << "/" << nextFRClockCycle << "] -------------------------");
+	//PRINT(" ------------------------- [" << currentClockCycle << "/" << nextFRClockCycle << "] -------------------------");
 
 	if (currentClockCycle > nextFRClockCycle) {
 		nextFRClockCycle += FIXED_SERVICE_RATE;
