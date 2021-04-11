@@ -476,6 +476,32 @@ void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dD
 	return;
 }
 
+void MultiChannelMemorySystem::updateDefence(uint64_t oldDefence, uint64_t newDefence) 
+{
+	if (DEBUG_DEFENCE) PRINT("Updating Defence Old: " << oldDefence << " New: " << newDefence);
+	if (protection == DAG) {
+		if (channels[0]->memoryController->iDefenceDomain == oldDefence) {
+			channels[0]->memoryController->old_iDefenceDomain = oldDefence;
+			channels[0]->memoryController->iDefenceDomain = newDefence;
+		} else if (channels[0]->memoryController->dDefenceDomain == oldDefence) {
+			channels[0]->memoryController->old_dDefenceDomain = oldDefence;
+			channels[0]->memoryController->dDefenceDomain = newDefence;
+		}
+	} 
+	else if (protection == FixedService_BTA) {
+		if (channels[0]->memoryController->iDefenceDomain == oldDefence) {
+			channels[0]->memoryController->iDefenceDomain = newDefence;
+		} else if (channels[0]->memoryController->dDefenceDomain == oldDefence) {
+			channels[0]->memoryController->dDefenceDomain = newDefence;
+		}
+	}
+	else if (protection == FixedRate) {
+		assert(false);
+	}
+	 
+	return;
+}
+
 void MultiChannelMemorySystem::endDefence()
 {
 	if (DEBUG_DEFENCE) PRINT("Stopping Defence");

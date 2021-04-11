@@ -62,6 +62,7 @@ namespace DRAMSim
 			int getIniFloat(const std::string &field, float *val);
 
 			void startDefence(uint64_t iDefenceDomain, uint64_t dDefenceDomain);
+			void updateDefence(uint64_t oldDomain, uint64_t newDomain);
 			void endDefence();
 
 	};
