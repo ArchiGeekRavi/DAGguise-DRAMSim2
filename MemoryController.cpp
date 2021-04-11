@@ -872,6 +872,7 @@ void MemoryController::update()
 							PRINT(" (Write)");
 						}
 						PRINT("  Protection Domain  : " << currentDomain);
+						PRINT("  Time  : " << currentClockCycle);
 						PRINT("  Rank : " << newTransactionRank);
 						PRINT("  Bank : " << newTransactionBank);
 						PRINT("  Row  : " << newTransactionRow);
