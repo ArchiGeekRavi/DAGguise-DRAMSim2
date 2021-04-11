@@ -462,7 +462,14 @@ void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dD
 		if (DEBUG_DEFENCE) PRINT("IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
 
 		channels[0]->memoryController->initDefence();
-	} else if (protection == FixedRate) {
+	} 
+	else if (protection == FixedService_BTA) {
+		if (DEBUG_DEFENCE) PRINT("BTA Protection Enabled!");
+
+		channels[0]->memoryController->iDefenceDomain = iDefenceDomain;
+		channels[0]->memoryController->dDefenceDomain = dDefenceDomain;
+	}
+	else if (protection == FixedRate) {
 		channels[0]->memoryController->initCQDefence(iDefenceDomain, dDefenceDomain);
 	}
 	 

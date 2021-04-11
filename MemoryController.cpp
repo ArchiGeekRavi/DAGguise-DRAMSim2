@@ -822,6 +822,8 @@ void MemoryController::update()
 			skip = 0;
 		} else if (protection == FixedService_Bank && currentClockCycle % 15 == 0) {
 			skip = 0;
+		} else if (protection == FixedService_BTA && currentClockCycle % 43 == 0) {
+			skip = 0;
 		}
 		
 		if (!skip) {
@@ -842,19 +844,17 @@ void MemoryController::update()
 				// pass these in as references so they get set by the addressMapping function
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
-				if ((transaction->securityDomain)%NUM_DOMAINS == currentDomain) {
-					switch (protection) {
-						case FixedService_Rank:
-							newTransactionRank = (transaction->securityDomain)%NUM_DOMAINS;
-							break;
-						case FixedService_Bank:
-							newTransactionBank = (transaction->securityDomain)%NUM_DOMAINS;
-							newTransactionRank = 0;
-							break;
-						default:
-							break;
-					}
-				} else {continue;};
+				// FIXME
+				newTransactionRank = 0;
+				newTransactionBank = 0;
+
+				assert(NUM_DOMAINS == 2);
+
+				if (currentDomain == 0 && (transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
+					continue;
+				} else if (currentDomain == 1 && !(transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
+					continue;
+				}
 
 				//if we have room, break up the transaction into the appropriate commands
 				//and add them to the command queue
@@ -871,7 +871,7 @@ void MemoryController::update()
 						{
 							PRINT(" (Write)");
 						}
-						PRINT("  Protection Domain  : " << (transaction->securityDomain)%NUM_DOMAINS);
+						PRINT("  Protection Domain  : " << currentDomain);
 						PRINT("  Rank : " << newTransactionRank);
 						PRINT("  Bank : " << newTransactionBank);
 						PRINT("  Row  : " << newTransactionRow);
