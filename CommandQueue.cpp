@@ -176,7 +176,6 @@ bool CommandQueue::pop(BusPacket **busPacket)
 	//
 	//deal with tFAW book-keeping
 	//	each rank has it's own counter since the restriction is on a device level
-        PRINT("POPPING\n");
 	for (size_t i=0;i<NUM_RANKS;i++)
 	{
 		//decrement all the counters we have going
@@ -256,7 +255,6 @@ bool CommandQueue::pop(BusPacket **busPacket)
 				sendingREF = true;
 			}
 		} // refreshWaiting
-                PRINT("TEST AA" << nextFRClockCycle <<"\n");
 
 		//if we're not sending a REF, proceed as normal
 		if (!sendingREF)
@@ -266,7 +264,6 @@ bool CommandQueue::pop(BusPacket **busPacket)
 			unsigned startingBank = nextBank;
 			do
 			{
-                                PRINT("TEST A\n");
 				vector<BusPacket *> &queue = getCommandQueue(nextRank, nextBank);
 				//make sure there is something in this queue first
 				//	also make sure a rank isn't waiting for a refresh
@@ -274,10 +271,8 @@ bool CommandQueue::pop(BusPacket **busPacket)
 				//		refresh logic above has sent one out (ie, letting banks close)
 				if ((!queue.empty() || (protection == FixedRate && currentClockCycle == nextFRClockCycle)) && !((nextRank == refreshRank) && refreshWaiting))
 				{
-                                        PRINT("TEST B\n");
 					if (queuingStructure == PerRank)
 					{
-                                                PRINT("NEVERHERE\n");
 						//search from beginning to find first issuable bus packet
 						for (size_t i=0;i<queue.size();i++)
 						{
@@ -297,14 +292,11 @@ bool CommandQueue::pop(BusPacket **busPacket)
 					}
 					else
 					{
-                                                PRINT("TEST0" << BANK_PARTITION_CYCLES << "/" << currentClockCycle << "\n");
 						if (protection == FixedRate) {
 							if (!queue.empty() && isIssuable(queue[0]) && (queue[0]->busPacketType!=ACTIVATE || (BANK_PARTITION_CYCLES + currentClockCycle < nextFRClockCycle)) && !(queue[0]->securityDomain == iDefenceDomain || queue[0]->securityDomain == dDefenceDomain)) {
-                                                                PRINT("ELEM SD: " << queue[0]->securityDomain << "idom" << iDefenceDomain << "ddom" << dDefenceDomain);
 								*busPacket = queue[0];
 								queue.erase(queue.begin());
 								foundIssuable = true;
-                                                                PRINT("TEST1\n");
 							} else if (currentClockCycle == nextFRClockCycle && nextRank == 0 && nextBank == 0) {
 								//search from beginning to find fixed rate transaction
 								for (size_t i=0;i<queue.size();i++)
@@ -319,25 +311,18 @@ bool CommandQueue::pop(BusPacket **busPacket)
 										*busPacket = queue[i];
 										queue.erase(queue.begin()+i);
 										foundIssuable = true;
-                                                                                PRINT("TEST2i\n");
 										break;
 									}
 								}
 
 								if (!foundIssuable) {
 									//create activate command to the row we just translated
-                                                                        PRINT("TEST3\n");
 
 									//create read or write command and enqueue it
 									BusPacket *command = new BusPacket(WRITE_P, 0, 0, 0, nextRank, nextBank, 0, 1, 0, dramsim_log);
 									queues[nextRank][nextBank].insert(queues[nextRank][nextBank].begin(), command);
 
 									BusPacket *activate = new BusPacket(ACTIVATE, 0, 0, 0, nextRank, nextBank, 0, 1, 0, dramsim_log);
-
-                                                                        PRINT("IDLE? " << (bankStates[0][0].currentBankState == Idle));
-                                                                        PRINT("REF? " << (bankStates[0][0].currentBankState == Refreshing));
-                                                                        PRINT("NEXTACTIVATE? " << bankStates[0][0].nextActivate);
-                                                                        PRINT("tFAW? " << tFAWCountdown[0].size());
 									if (isIssuable(activate)) {
 										*busPacket = activate;
 										foundIssuable = true;
@@ -614,8 +599,6 @@ bool CommandQueue::pop(BusPacket **busPacket)
 	{
 		tFAWCountdown[(*busPacket)->rank].push_back(tFAW);
 	}
-
-        PRINT("DONE FUNC\n");
 
 	return true;
 }
