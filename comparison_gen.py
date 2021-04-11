@@ -23,7 +23,7 @@ import itertools
 parameters = {'QUEUING_STRUCTURE': ['per_rank', 'per_rank_per_bank'],
 					'ROW_BUFFER_POLICY': ['open_page', 'close_page'],
 					'SCHEDULING_POLICY': ['rank_then_bank_round_robin','bank_then_rank_round_robin'],
-					'PROTECTION' : ['reg','fsb','fsr','fsc','fst', 'dag']
+					'PROTECTION' : ['reg','fsb','fsr','fsc','fst', 'dag', 'fr']
 					}
 
 devices = ['DDR3_micron_64M_8B_x4_sg15.ini', 'DDR2_micron_32M_4B_x4_sg3E.ini'];
