@@ -91,6 +91,11 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	totalFakeReadRequests = 0;
 	totalFakeWriteRequests = 0;
 
+	iDefenceDomain = 0;
+	dDefenceDomain = 0;
+	old_iDefenceDomain = 999;
+	old_dDefenceDomain = 999;
+
 	//reserve memory for vectors
 	transactionQueue.reserve(TRANS_QUEUE_DEPTH);
 	defenceQueue.reserve(DEFENCE_QUEUE_DEPTH);
@@ -1043,7 +1048,7 @@ void MemoryController::update()
 				}
 
 				if (protection == DAG && currentPhase != -1 &&
-					(/*pendingReadTransactions[i]->securityDomain == iDefenceDomain ||*/ pendingReadTransactions[i]->securityDomain == dDefenceDomain)) {
+					(/*pendingReadTransactions[i]->securityDomain == iDefenceDomain ||*/ pendingReadTransactions[i]->securityDomain == dDefenceDomain || pendingReadTransactions[i]->securityDomain == old_dDefenceDomain)) {
 					// Update phase information
 					finishTimes[pendingReadTransactions[i]->nodeID] = currentClockCycle;
 					PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << " at time " << dec << currentClockCycle);
