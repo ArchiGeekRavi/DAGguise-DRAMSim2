@@ -562,9 +562,7 @@ void MemoryController::update()
 			// pass these in as references so they get set by the addressMapping function
 			addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
-                        //TODO: Convert back to multi-bank
-                        newTransactionBank = 0;
-                        newTransactionRank = 0;
+            if (SINGLE_BANK) newTransactionBank = 0;
 
 			//if we have room, break up the transaction into the appropriate commands
 			//and add them to the command queue
@@ -654,6 +652,7 @@ void MemoryController::update()
 			int writeID = -1;
 
 			int writeRequested = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["combinedWB"];
+			int writeBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["combinedWBBankID"];
 			
 			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 
@@ -662,14 +661,16 @@ void MemoryController::update()
 				transaction = defenceQueue[i];
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
+				if (SINGLE_BANK) newTransactionBank = 0;
+
 				// First we need to find a read
-				if (transaction->transactionType == DATA_READ && readID == -1) {
+				if (transaction->transactionType == DATA_READ && readID == -1 && scheduledBank == newTransactionBank) {
 					readTransaction = transaction;
 					readID = i;
                     defenceQueue.erase(defenceQueue.begin()+readID);
                     i--;
 				} 
-				else if (transaction->transactionType == DATA_WRITE && writeID == -1 && writeRequested) {
+				else if (transaction->transactionType == DATA_WRITE && writeID == -1 && writeRequested && writeBank == newTransactionBank) {
 					writeTransaction = transaction;
 					writeID = i;
                 	defenceQueue.erase(defenceQueue.begin()+writeID);
@@ -682,15 +683,6 @@ void MemoryController::update()
 
 				if ((readID != -1) && (writeID != -1 || !writeRequested)) break;
 
-				/* MULTI-BANK
-				if (scheduledBank == newTransactionBank) {
-					transaction->phaseID = currentPhase;
-					transaction->nodeId = scheduledNode;
-
-					readFound = true;
-					break;
-				}
-				*/
 			}
 
 			if (readID == -1) {
@@ -748,9 +740,7 @@ void MemoryController::update()
 			// pass these in as references so they get set by the addressMapping function
 			addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
-			//TODO: Remove me!
-			newTransactionBank = 0;
-			newTransactionRank = 0;
+			if (SINGLE_BANK) newTransactionBank = 0;
 
 			// If we have a request scheduled, try to match the bank with a transaction in the queue
 
@@ -848,9 +838,7 @@ void MemoryController::update()
 				// pass these in as references so they get set by the addressMapping function
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
-				// FIXME
-				newTransactionRank = 0;
-				newTransactionBank = 0;
+				if (SINGLE_BANK) newTransactionBank = 0;
 
 				assert(NUM_DOMAINS == 2);
 
@@ -1047,7 +1035,7 @@ void MemoryController::update()
 				}
 
 				if (protection == DAG && currentPhase != -1 &&
-					(/*pendingReadTransactions[i]->securityDomain == iDefenceDomain ||*/ pendingReadTransactions[i]->securityDomain == dDefenceDomain || pendingReadTransactions[i]->securityDomain == old_dDefenceDomain)) {
+					(pendingReadTransactions[i]->securityDomain == iDefenceDomain || pendingReadTransactions[i]->securityDomain == old_iDefenceDomain || pendingReadTransactions[i]->securityDomain == dDefenceDomain || pendingReadTransactions[i]->securityDomain == old_dDefenceDomain)) {
 					// Update phase information
 					finishTimes[pendingReadTransactions[i]->nodeID] = currentClockCycle;
 					PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << " at time " << dec << currentClockCycle);
@@ -1223,7 +1211,7 @@ bool MemoryController::addTransaction(Transaction *trans)
 {
 	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain << " isWrite? " << (trans->transactionType == DATA_WRITE) << " Current Cycle: " << currentClockCycle);
 
-	if (trans->securityDomain == dDefenceDomain && currentPhase != -1) {
+	if ((trans->securityDomain == iDefenceDomain || trans->securityDomain == dDefenceDomain) && currentPhase != -1) {
 		defenceQueue.push_back(trans);
 		return true;
 	}

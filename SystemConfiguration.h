@@ -139,6 +139,7 @@ extern unsigned BANK_PARTITION_CYCLES;
 extern unsigned FIXED_SERVICE_RATE;
 
 extern unsigned EPOCH_LENGTH;
+extern unsigned SINGLE_BANK;
 extern unsigned DEF_CLK_DIV;
 extern float SLACK;
 
