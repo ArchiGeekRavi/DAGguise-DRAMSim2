@@ -141,6 +141,8 @@ private:
 
 	uint64_t totalTransactions;
 	uint64_t currentDomain;
+	uint64_t BTAPhase;
+
 	vector<uint64_t> grandTotalBankAccesses; 
 	vector<uint64_t> totalReadsPerBank;
 	vector<uint64_t> totalWritesPerBank;

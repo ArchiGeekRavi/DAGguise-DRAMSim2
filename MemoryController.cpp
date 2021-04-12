@@ -83,6 +83,7 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	//set here to avoid compile errors
 	currentClockCycle = 0;
 	currentDomain = 0;
+	BTAPhase = 0;
 
 	currentPhase = -1;
 	remainingInPhase = 0;
@@ -142,7 +143,7 @@ void MemoryController::receiveFromBus(BusPacket *bpacket)
 	}
 
 	//add to return read data queue
-	returnTransaction.push_back(new Transaction(RETURN_DATA, bpacket->physicalAddress, bpacket->data, -1, -1, -1, false));
+	returnTransaction.push_back(new Transaction(RETURN_DATA, bpacket->physicalAddress, bpacket->data, -1, -1, -1, false, -1));
 	totalReadsPerBank[SEQUENTIAL(bpacket->rank,bpacket->bank)]++;
 
 	// this delete statement saves a mindboggling amount of memory
@@ -690,13 +691,7 @@ void MemoryController::update()
 
                 fakeReadRequestsThisPhase++;
 
-				readTransaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
-				newTransactionChan = 0;
-				newTransactionRank = 0;
-				newTransactionBank = scheduledBank;
-				newTransactionRow = 0;
-				newTransactionColumn = 0;
-
+				readTransaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true, scheduledBank);
 				readTransaction->timeAdded = currentClockCycle;
 			} 
 			transactionQueue.push_back(readTransaction);
@@ -708,13 +703,7 @@ void MemoryController::update()
                                         
                     fakeWriteRequestsThisPhase++;
 
-					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true);
-					newTransactionChan = 0;
-					newTransactionRank = 0;
-					newTransactionBank = scheduledBank;
-					newTransactionRow = 0;
-					newTransactionColumn = 0;
-
+					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true, writeBank);
 					writeTransaction->timeAdded = currentClockCycle;
 				}
 
@@ -741,6 +730,7 @@ void MemoryController::update()
 			addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
 			if (SINGLE_BANK) newTransactionBank = 0;
+			else if (transaction->isFake) newTransactionBank = transaction->fakeBank;
 
 			// If we have a request scheduled, try to match the bank with a transaction in the queue
 
@@ -816,13 +806,16 @@ void MemoryController::update()
 			skip = 0;
 		} else if (protection == FixedService_Bank && currentClockCycle % 15 == 0) {
 			skip = 0;
-		} else if (protection == FixedService_BTA && currentClockCycle % 43 == 0) {
+		} else if (protection == FixedService_BTA && currentClockCycle % 43 == 0 && SINGLE_BANK) {
+			skip = 0;
+		} else if (protection == FixedService_BTA && currentClockCycle % 15 == 0 && !SINGLE_BANK) {
 			skip = 0;
 		}
 		
 		if (!skip) {
 			// Search for transaction we can issue
 			currentDomain = (currentDomain + 1) % NUM_DOMAINS;
+			BTAPhase = (BTAPhase + 1) % 3;
 
 			for (size_t i=0;i<transactionQueue.size();i++)
 			{
@@ -842,12 +835,20 @@ void MemoryController::update()
 
 				assert(NUM_DOMAINS == 2);
 
+				if (!SINGLE_BANK) {
+					PRINT("BTA PHASE: " << BTAPhase);
+
+					if (newTransactionBank % 3 != BTAPhase) {
+						continue;
+					}
+				}
+
 				if (currentDomain == 0 && (transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
 					continue;
 				} else if (currentDomain == 1 && !(transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
 					continue;
 				}
-
+				
 				//if we have room, break up the transaction into the appropriate commands
 				//and add them to the command queue
 				if (commandQueue.hasRoomFor(2, newTransactionRank, newTransactionBank))
@@ -1094,30 +1095,6 @@ void MemoryController::update()
 					}
 
 				}
-
-				/*if (protection == DAG && remainingInPhase == 0 && (currentPhase == this->dag.size()-1) && requestDefenceDone && !beginWait) {
-					totalFakeReadRequests += fakeReadRequestsThisPhase;
-					fakeReadRequestsThisPhase = 0;
-					fakeWriteRequestsThisPhase = 0;
-
-					if(DEBUG_DEFENCE) {
-						PRINT("Finished defence DAG, disabling defences!");
-						PRINT("Total Defence Nodes Executed: " << std::dec << totalNodes << ", Number of Fake Read Requests: " << totalFakeReadRequests << " Fake Write Requests: " << totalFakeWriteRequests);
-					}
-
-					currentPhase = -1;
-                    for (size_t i=0; i<defenceQueue.size(); i++) {
-                        Transaction* transaction = defenceQueue[i];
-				        defenceQueue.erase(defenceQueue.begin()+i);
-                        transactionQueue.push_back(transaction);
-                    }
-				}
-				else if (protection == DAG && remainingInPhase == 0 && (currentPhase == this->dag.size()-1) && !fixedRateFallback && !beginWait) {
-					if(DEBUG_DEFENCE) PRINT("WARNING: Finished Defence DAG, falling back to fixed rate pattern!");
-					fixedRateFallback = true;
-					schedule[currentClockCycle+fixedRate] = 0;
-				}*/
-
 
 				delete pendingReadTransactions[i];
 				pendingReadTransactions.erase(pendingReadTransactions.begin()+i);

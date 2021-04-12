@@ -35,6 +35,7 @@ namespace DRAMSim
 
 void addressMapping(uint64_t physicalAddress, unsigned &newTransactionChan, unsigned &newTransactionRank, unsigned &newTransactionBank, unsigned &newTransactionRow, unsigned &newTransactionColumn)
 {
+	uint64_t origAddress = physicalAddress;
 	uint64_t tempA, tempB;
 	unsigned transactionSize = TRANSACTION_SIZE;
 	uint64_t transactionMask =  transactionSize - 1; //ex: (64 bit bus width) x (8 Burst Length) - 1 = 64 bytes - 1 = 63 = 0x3f mask
@@ -120,9 +121,9 @@ void addressMapping(uint64_t physicalAddress, unsigned &newTransactionChan, unsi
 	{
 		//chan:row:col:bank:rank
 		
-		newTransactionBank = ((((physicalAddress >> 13) & 1) ^ ((physicalAddress >> 16) & 1)) << 2) | 
-								((((physicalAddress >> 14) & 1) ^ ((physicalAddress >> 17) & 1)) << 1) | 
-								(((physicalAddress >> 15) & 1) ^ ((physicalAddress >> 18) & 1));
+		newTransactionBank = ((((origAddress >> 13) & 1) ^ ((origAddress >> 16) & 1)) << 2) | 
+								((((origAddress >> 14) & 1) ^ ((origAddress >> 17) & 1)) << 1) | 
+								(((origAddress >> 15) & 1) ^ ((origAddress >> 18) & 1));
 
 		newTransactionRank = 0;
 
