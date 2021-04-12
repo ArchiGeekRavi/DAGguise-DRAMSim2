@@ -200,7 +200,6 @@ void MemoryController::initDefence()
 void MemoryController::stopDefence()
 {
 	PRINT("Stopping Defence Deprecated!");
-	exit(-1);
 }
 
 //memory controller update
