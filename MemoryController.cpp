@@ -832,8 +832,8 @@ void MemoryController::update()
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
 				if (SINGLE_BANK) newTransactionBank = 0;
-
-				assert(NUM_DOMAINS == 2);
+				//Technically NUM_DOMAINS must be a power, but that's too hard to check.
+				assert(NUM_DOMAINS % 2 == 0);
 
 				if (!SINGLE_BANK) {
 					PRINT("BTA PHASE: " << BTAPhase);
@@ -843,9 +843,9 @@ void MemoryController::update()
 					}
 				}
 
-				if (currentDomain == 0 && (transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
+				if (currentDomain == 0 && !(transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
 					continue;
-				} else if (currentDomain == 1 && !(transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
+				} else if (currentDomain != 0 && (transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
 					continue;
 				}
 				
