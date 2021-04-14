@@ -187,7 +187,7 @@ void MemoryController::initDefence(int domainID)
 
     totalPhases.push_back(this->dag[domainID].size());
 
-	PRINT("Slack setting: " << SLACK);
+	//PRINT("Slack setting: " << SLACK);
 	assert(SLACK < 1.01);
 
 	for (auto& node : this->dag[domainID][to_string(currentPhase[domainID])]["node"].items()) {
@@ -656,6 +656,15 @@ void MemoryController::update()
 			int dataID = dataIDArr[scheduledDomain];
 			int instID = instIDArr[scheduledDomain];
 
+
+                        int oldDataID = -100;
+                        int oldInstID = -100;
+
+                        if(oldDataIDArr.size() > scheduledDomain) {
+                          oldDataID = oldDataIDArr[scheduledDomain];
+                          oldInstID = oldInstIDArr[scheduledDomain];
+                        }
+
 			assert(currentPhase[scheduledDomain] != -1);
 			
 			scheduledBank = this->dag[scheduledDomain][to_string(currentPhase[scheduledDomain])]["node"][to_string(scheduledNode)]["bankID"];
@@ -676,8 +685,10 @@ void MemoryController::update()
 			// Search the defence queue for a match...
 			for (size_t i=0; i<defenceQueue.size(); i++) {
 				transaction = defenceQueue[i];
+                                //PRINT("Defence queue occupant: index: " << i << " address: " << transaction->address << " secdom " << transaction->securityDomain);
+                                //PRINT("Curr domain: " << dataID << " " << instID);
 
-				if (transaction->securityDomain != dataID && transaction->securityDomain != instID) continue;
+				if (transaction->securityDomain != dataID && transaction->securityDomain != instID && transaction->securityDomain != oldDataID && transaction->securityDomain != oldInstID) continue;
 
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
@@ -750,6 +761,7 @@ void MemoryController::update()
 
 			if (SINGLE_BANK) newTransactionBank = 0;
 			else if (transaction->isFake) newTransactionBank = transaction->fakeBank;
+                        //PRINT("index " << i << " contains address" << transaction->address);
 
 			// If we have a request scheduled, try to match the bank with a transaction in the queue
 
@@ -836,8 +848,8 @@ void MemoryController::update()
 			currentDomain = (currentDomain + 1) % NUM_DOMAINS;
 			BTAPhase = (BTAPhase + 1) % 3;
 			
-                        if (!SINGLE_BANK) PRINT("BTA PHASE: " << BTAPhase);
-                        PRINT("CURRENT DOMAIN: " << currentDomain);
+                        //if (!SINGLE_BANK) PRINT("BTA PHASE: " << BTAPhase);
+                        //PRINT("CURRENT DOMAIN: " << currentDomain);
 
 			for (size_t i=0;i<transactionQueue.size();i++)
 			{
@@ -864,11 +876,11 @@ void MemoryController::update()
 					}
 				}
 
-                                PRINT(transaction->securityDomain);
-                                if (dataIDArr.size() >= 1) {
+                                //PRINT(transaction->securityDomain);
+                                /*if (dataIDArr.size() >= 1) {
                                   PRINT(dataIDArr[0]);
                                   PRINT(instIDArr[0]);
-                                }
+                                }*/
 
 				bool isSecure0 = !(dataIDArr.size() < 1) && (transaction->securityDomain == dataIDArr[0] || transaction->securityDomain == instIDArr[0]);
 				bool isSecure1 = !(dataIDArr.size() < 2) && (transaction->securityDomain == dataIDArr[1] || transaction->securityDomain == instIDArr[1]);
@@ -1239,6 +1251,7 @@ bool MemoryController::addTransaction(Transaction *trans)
 	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain << " isWrite? " << (trans->transactionType == DATA_WRITE) << " Current Cycle: " << currentClockCycle);
 
 	if (protection == DAG && (revData.count(trans->securityDomain) || revInst.count(trans->securityDomain))) {
+                PRINT("PUSHED!")
 		defenceQueue.push_back(trans);
 		return true;
 	}
