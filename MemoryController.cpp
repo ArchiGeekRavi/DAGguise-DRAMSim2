@@ -710,7 +710,7 @@ void MemoryController::update()
 
                 fakeReadRequestsThisPhase[scheduledDomain]++;
 
-				readTransaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase[scheduledDomain], scheduledNode, true, scheduledBank);
+				readTransaction = new Transaction(DATA_READ, 0, nullptr, dataID, currentPhase[scheduledDomain], scheduledNode, true, scheduledBank);
 				readTransaction->timeAdded = currentClockCycle;
 			} 
 			transactionQueue.push_back(readTransaction);
@@ -722,7 +722,7 @@ void MemoryController::update()
                                         
                     fakeWriteRequestsThisPhase[scheduledDomain]++;
 
-					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dDefenceDomain, currentPhase[scheduledDomain], scheduledNode, true, writeBank);
+					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dataID, currentPhase[scheduledDomain], scheduledNode, true, writeBank);
 					writeTransaction->timeAdded = currentClockCycle;
 				}
 
@@ -835,6 +835,9 @@ void MemoryController::update()
 			// Search for transaction we can issue
 			currentDomain = (currentDomain + 1) % NUM_DOMAINS;
 			BTAPhase = (BTAPhase + 1) % 3;
+			
+                        if (!SINGLE_BANK) PRINT("BTA PHASE: " << BTAPhase);
+                        PRINT("CURRENT DOMAIN: " << currentDomain);
 
 			for (size_t i=0;i<transactionQueue.size();i++)
 			{
@@ -855,12 +858,17 @@ void MemoryController::update()
 				assert(NUM_DOMAINS % 2 == 0);
 
 				if (!SINGLE_BANK) {
-					PRINT("BTA PHASE: " << BTAPhase);
 
 					if (newTransactionBank % 3 != BTAPhase) {
 						continue;
 					}
 				}
+
+                                PRINT(transaction->securityDomain);
+                                if (dataIDArr.size() >= 1) {
+                                  PRINT(dataIDArr[0]);
+                                  PRINT(instIDArr[0]);
+                                }
 
 				bool isSecure0 = !(dataIDArr.size() < 1) && (transaction->securityDomain == dataIDArr[0] || transaction->securityDomain == instIDArr[0]);
 				bool isSecure1 = !(dataIDArr.size() < 2) && (transaction->securityDomain == dataIDArr[1] || transaction->securityDomain == instIDArr[1]);
@@ -1080,7 +1088,7 @@ void MemoryController::update()
 				if (protection == DAG && currDomain != -1) {
 					// Update phase information
 					finishTimes[currDomain][pendingReadTransactions[i]->nodeID] = currentClockCycle;
-					PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << " at time " << dec << currentClockCycle);
+					PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << " at time " << dec << currentClockCycle << " in domain " << currDomain);
 					remainingInPhase[currDomain]--;
 
 					if (remainingInPhase[currDomain] == 0) {
@@ -1093,7 +1101,7 @@ void MemoryController::update()
 						int numNew = this->dag[currDomain][to_string((currentPhase[currDomain]+1)%totalPhases[currDomain])]["node"].size();
 
 						if(DEBUG_DEFENCE) PRINT("Finished Phase: " << currentPhase[currDomain] << ". Fake read requests issued: " << (fakeReadRequestsThisPhase[currDomain]) << " out of " << (nodesThisPhase[currDomain]) << " nodes.");
-						if(DEBUG_DEFENCE) PRINT("==== Starting new phase " << ((currentPhase[currDomain]+1)%totalPhases[currDomain]) << " ====");
+						if(DEBUG_DEFENCE) PRINT("==== Starting new phase " << ((currentPhase[currDomain]+1)%totalPhases[currDomain]) << " (domain: " << currDomain << " ====");
 
 						totalFakeReadRequests[currDomain] += fakeReadRequestsThisPhase[currDomain];
 						totalFakeWriteRequests[currDomain] += fakeWriteRequestsThisPhase[currDomain];
@@ -1230,7 +1238,7 @@ bool MemoryController::addTransaction(Transaction *trans)
 {
 	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain << " isWrite? " << (trans->transactionType == DATA_WRITE) << " Current Cycle: " << currentClockCycle);
 
-	if (revData.count(trans->securityDomain) || revInst.count(trans->securityDomain)) {
+	if (protection == DAG && (revData.count(trans->securityDomain) || revInst.count(trans->securityDomain))) {
 		defenceQueue.push_back(trans);
 		return true;
 	}

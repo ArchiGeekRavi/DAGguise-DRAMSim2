@@ -42,9 +42,9 @@
 using namespace DRAMSim; 
 
 
-MultiChannelMemorySystem::MultiChannelMemorySystem(const string &deviceIniFilename_, const string &systemIniFilename_, const string &pwd_, const string &traceFilename_, const string &defenceFilename_, unsigned megsOfMemory_, string *visFilename_, const IniReader::OverrideMap *paramOverrides)
+MultiChannelMemorySystem::MultiChannelMemorySystem(const string &deviceIniFilename_, const string &systemIniFilename_, const string &pwd_, const string &traceFilename_, const string &defenceFilename_, const string &defenceFilename2_, unsigned megsOfMemory_, string *visFilename_, const IniReader::OverrideMap *paramOverrides)
 	:megsOfMemory(megsOfMemory_), deviceIniFilename(deviceIniFilename_),
-	systemIniFilename(systemIniFilename_), traceFilename(traceFilename_), defenceFilename(defenceFilename_),
+	systemIniFilename(systemIniFilename_), traceFilename(traceFilename_), defenceFilename(defenceFilename_), defenceFilename2(defenceFilename2_),
 	pwd(pwd_), visFilename(visFilename_), 
 	clockDomainCrosser(new ClockDomain::Callback<MultiChannelMemorySystem, void>(this, &MultiChannelMemorySystem::actual_update)),
 	csvOut(new CSVWriter(visDataOut))
@@ -457,7 +457,15 @@ void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dD
 		int domainNum = channels[0]->memoryController->dataIDArr.size();
 
 		std::ifstream i(defenceFilename.c_str());
-		i >> channels[0]->memoryController->dag[domainNum];
+		std::ifstream i2(defenceFilename2.c_str());
+
+                json j;
+                if (domainNum == 0) {
+		  i >> j;
+                } else {
+                  i2 >> j;
+                }
+                channels[0]->memoryController->dag.push_back(j); 
 
 		channels[0]->memoryController->instIDArr.push_back(iDefenceDomain);
 		channels[0]->memoryController->dataIDArr.push_back(dDefenceDomain);
@@ -493,11 +501,11 @@ void MultiChannelMemorySystem::updateDefence(uint64_t oldDefence, uint64_t newDe
 	if (DEBUG_DEFENCE) PRINT("Updating Defence Old: " << oldDefence << " New: " << newDefence);
 	if (protection == DAG || protection == FixedService_BTA) {
 
-		if (isdata) {
+		if (isdata && channels[0]->memoryController->revData.count(oldDefence)) {
 			domain = channels[0]->memoryController->revData[oldDefence];
 			channels[0]->memoryController->revOldData[oldDefence] = domain;
 
-			if (domain > channels[0]->memoryController->oldDataIDArr.size()) {
+			if (domain >= channels[0]->memoryController->oldDataIDArr.size()) {
 				channels[0]->memoryController->oldDataIDArr.push_back(oldDefence);
 			} else {
 				channels[0]->memoryController->oldDataIDArr[domain] = oldDefence;
@@ -505,11 +513,13 @@ void MultiChannelMemorySystem::updateDefence(uint64_t oldDefence, uint64_t newDe
 
 			channels[0]->memoryController->revData[newDefence] = domain;
 			channels[0]->memoryController->dataIDArr[domain] = newDefence;
-		} else {
+		} else if (!isdata && channels[0]->memoryController->revInst.count(oldDefence))
+                {
 			domain = channels[0]->memoryController->revInst[oldDefence];
+                        PRINT("DOMAIN: " << domain << "\n");
 			channels[0]->memoryController->revOldInst[oldDefence] = domain;
 
-			if (domain > channels[0]->memoryController->oldInstIDArr.size()) {
+			if (domain >= channels[0]->memoryController->oldInstIDArr.size()) {
 				channels[0]->memoryController->oldInstIDArr.push_back(oldDefence);
 			} else {
 				channels[0]->memoryController->oldInstIDArr[domain] = oldDefence;
@@ -624,8 +634,8 @@ int MultiChannelMemorySystem::getIniFloat(const std::string& field, float *val)
 }
 
 namespace DRAMSim {
-MultiChannelMemorySystem *getMemorySystemInstance(const string &dev, const string &sys, const string &pwd, const string &trc, const string &def, unsigned megsOfMemory, string *visfilename) 
+MultiChannelMemorySystem *getMemorySystemInstance(const string &dev, const string &sys, const string &pwd, const string &trc, const string &def, const string &def2, unsigned megsOfMemory, string *visfilename) 
 {
-	return new MultiChannelMemorySystem(dev, sys, pwd, trc, def, megsOfMemory, visfilename);
+	return new MultiChannelMemorySystem(dev, sys, pwd, trc, def, def2, megsOfMemory, visfilename);
 }
 }

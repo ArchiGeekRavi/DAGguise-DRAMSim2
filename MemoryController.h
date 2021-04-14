@@ -117,10 +117,6 @@ public:
 	vector<Transaction *> defenceQueue;
 
 	vector<json> dag;
-	uint64_t dDefenceDomain;
-	uint64_t iDefenceDomain;
-	uint64_t old_dDefenceDomain;
-	uint64_t old_iDefenceDomain;
 private:
 	ostream &dramsim_log;
 	vector< vector <BankState> > bankStates;
