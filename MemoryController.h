@@ -75,7 +75,7 @@ public:
 	void update();
 	void printStats(bool finalStats = false);
 	void resetStats(); 
-	void initDefence();
+	void initDefence(int domainID);
 	void stopDefence();
 
 	void initCQDefence(uint64_t iDomain, uint64_t dDomain) {
@@ -83,26 +83,40 @@ public:
 		commandQueue.dDefenceDomain = dDomain;
 	}
 
-	map<int, uint64_t> finishTimes;
-	map<uint64_t, int> schedule;
-	int currentPhase;
-	int remainingInPhase;
-	int totalPhases;
+	map<int, map<int, uint64_t>> finishTimes;
+	map<uint64_t, int> scheduleNode;
+	map<uint64_t, int> scheduleDomain;
 
-	int fakeReadRequestsThisPhase;
-	int fakeWriteRequestsThisPhase;
-	int nodesThisPhase;
+	vector<int> dataIDArr;
+	vector<int> instIDArr;
 
-	int totalFakeReadRequests;
-	int totalFakeWriteRequests;
+	map<int,int> revData;
+	map<int,int> revInst;
 
-	int totalNodes;
+	vector<int> oldDataIDArr;
+	vector<int> oldInstIDArr;
+
+	map<int,int> revOldData;
+	map<int,int> revOldInst;
+	
+	vector<int> currentPhase;
+	vector<int> remainingInPhase;
+	vector<int> totalPhases;
+
+	vector<int> fakeReadRequestsThisPhase;
+	vector<int> fakeWriteRequestsThisPhase;
+	vector<int> nodesThisPhase;
+
+	vector<int> totalFakeReadRequests;
+	vector<int> totalFakeWriteRequests;
+
+	vector<int> totalNodes;
 
 	//fields
 	vector<Transaction *> transactionQueue;
 	vector<Transaction *> defenceQueue;
 
-	json dag;
+	vector<json> dag;
 	uint64_t dDefenceDomain;
 	uint64_t iDefenceDomain;
 	uint64_t old_dDefenceDomain;

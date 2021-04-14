@@ -85,6 +85,7 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	currentDomain = 0;
 	BTAPhase = 0;
 
+	/*
 	currentPhase = -1;
 	remainingInPhase = 0;
 
@@ -92,10 +93,12 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	totalFakeReadRequests = 0;
 	totalFakeWriteRequests = 0;
 
-	iDefenceDomain = 0;
+	
+	iDefenceDomain = std::vector<int>;
 	dDefenceDomain = 0;
 	old_iDefenceDomain = 999;
 	old_dDefenceDomain = 999;
+	*/
 
 	//reserve memory for vectors
 	transactionQueue.reserve(TRANS_QUEUE_DEPTH);
@@ -166,33 +169,40 @@ void MemoryController::attachRanks(vector<Rank *> *ranks)
 }
 
 //gives the memory controller a handle on the rank objects
-void MemoryController::initDefence()
+void MemoryController::initDefence(int domainID)
 {
 	/* Create bookkeeping maps for convenience */
-	currentPhase = 0;
-	remainingInPhase = 0;
+	assert(domainID >= currentPhase.size());
 
-	fakeReadRequestsThisPhase = 0;
-	fakeWriteRequestsThisPhase = 0;
-	nodesThisPhase = 0;
+	currentPhase.push_back(0);
+	remainingInPhase.push_back(0);
 
-        totalPhases = this->dag.size();
+	fakeReadRequestsThisPhase.push_back(0);
+	fakeWriteRequestsThisPhase.push_back(0);
+	nodesThisPhase.push_back(0);
+	totalNodes.push_back(0);
+
+	totalFakeReadRequests.push_back(0);
+	totalFakeWriteRequests.push_back(0);
+
+    totalPhases.push_back(this->dag[domainID].size());
 
 	PRINT("Slack setting: " << SLACK);
 	assert(SLACK < 1.01);
 
-	for (auto& node : this->dag[to_string(currentPhase)]["node"].items()) {
-		remainingInPhase++;
-		nodesThisPhase++;
-		totalNodes++;
+	for (auto& node : this->dag[domainID][to_string(currentPhase[domainID])]["node"].items()) {
+		remainingInPhase[domainID]++;
+		nodesThisPhase[domainID]++;
+		totalNodes[domainID]++;
 
-		int scheduledTime = (int(this->dag[to_string(currentPhase)]["edge"][to_string(0)]["latency"])/DEF_CLK_DIV)*SLACK + currentClockCycle;
+		int scheduledTime = (int(this->dag[domainID][to_string(currentPhase[domainID])]["edge"][to_string(0)]["latency"])/DEF_CLK_DIV)*SLACK + currentClockCycle;
 		
 		if (scheduledTime == currentClockCycle) scheduledTime++;
-		while (schedule.count(scheduledTime) > 0) scheduledTime++;
+		while (scheduleNode.count(scheduledTime) > 0) scheduledTime++;
 
 		if(DEBUG_DEFENCE) PRINT("Scheduling node " << node.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
-		schedule[scheduledTime] = stoi(node.key());
+		scheduleNode[scheduledTime] = stoi(node.key());
+		scheduleDomain[scheduledTime] = domainID;
 	}
 
 	if(DEBUG_DEFENCE) PRINT("Starting initial phase!");
@@ -636,13 +646,19 @@ void MemoryController::update()
 
 		// First, check if we have anything scheduled
 		int scheduledBank = -1;
-		int scheduledNode;
+		int scheduledNode, scheduledDomain;
 
-		if (currentPhase != -1 && schedule.count(currentClockCycle)) {
+		if (scheduleNode.count(currentClockCycle)) {
 			// Determine the scheduled defence node's information
-			scheduledNode = schedule[currentClockCycle];
+			scheduledNode = scheduleNode[currentClockCycle];
+			scheduledDomain = scheduleDomain[currentClockCycle];
+
+			int dataID = dataIDArr[scheduledDomain];
+			int instID = instIDArr[scheduledDomain];
+
+			assert(currentPhase[scheduledDomain] != -1);
 			
-			scheduledBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["bankID"];
+			scheduledBank = this->dag[scheduledDomain][to_string(currentPhase[scheduledDomain])]["node"][to_string(scheduledNode)]["bankID"];
 			
 			Transaction *transaction;
 
@@ -652,14 +668,17 @@ void MemoryController::update()
 			Transaction *writeTransaction;
 			int writeID = -1;
 
-			int writeRequested = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["combinedWB"];
-			int writeBank = this->dag[to_string(currentPhase)]["node"][to_string(scheduledNode)]["combinedWBBankID"];
+			int writeRequested = this->dag[scheduledDomain][to_string(currentPhase[scheduledDomain])]["node"][to_string(scheduledNode)]["combinedWB"];
+			int writeBank = this->dag[scheduledDomain][to_string(currentPhase[scheduledDomain])]["node"][to_string(scheduledNode)]["combinedWBBankID"];
 			
 			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 
 			// Search the defence queue for a match...
 			for (size_t i=0; i<defenceQueue.size(); i++) {
 				transaction = defenceQueue[i];
+
+				if (transaction->securityDomain != dataID && transaction->securityDomain != instID) continue;
+
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
 				if (SINGLE_BANK) newTransactionBank = 0;
@@ -679,7 +698,7 @@ void MemoryController::update()
 				}
 				else continue;
 
-				transaction->phaseID = currentPhase;
+				transaction->phaseID = currentPhase[scheduledDomain];
 				transaction->nodeID = scheduledNode;
 
 				if ((readID != -1) && (writeID != -1 || !writeRequested)) break;
@@ -689,9 +708,9 @@ void MemoryController::update()
 			if (readID == -1) {
 				if(DEBUG_DEFENCE) PRINT("No matching read transaction, enqueuing fake request")
 
-                fakeReadRequestsThisPhase++;
+                fakeReadRequestsThisPhase[scheduledDomain]++;
 
-				readTransaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true, scheduledBank);
+				readTransaction = new Transaction(DATA_READ, 0, nullptr, dDefenceDomain, currentPhase[scheduledDomain], scheduledNode, true, scheduledBank);
 				readTransaction->timeAdded = currentClockCycle;
 			} 
 			transactionQueue.push_back(readTransaction);
@@ -701,9 +720,9 @@ void MemoryController::update()
 				if (writeID == -1) {
 					if(DEBUG_DEFENCE) PRINT("No matching write transaction, enqueuing fake request")
                                         
-                    fakeWriteRequestsThisPhase++;
+                    fakeWriteRequestsThisPhase[scheduledDomain]++;
 
-					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dDefenceDomain, currentPhase, scheduledNode, true, writeBank);
+					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dDefenceDomain, currentPhase[scheduledDomain], scheduledNode, true, writeBank);
 					writeTransaction->timeAdded = currentClockCycle;
 				}
 
@@ -843,11 +862,27 @@ void MemoryController::update()
 					}
 				}
 
-				if (currentDomain == 0 && !(transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
-					continue;
-				} else if (currentDomain != 0 && (transaction->securityDomain == iDefenceDomain || transaction->securityDomain == dDefenceDomain)) {
-					continue;
+				bool isSecure0 = !(dataIDArr.size() < 1) && (transaction->securityDomain == dataIDArr[0] || transaction->securityDomain == instIDArr[0]);
+				bool isSecure1 = !(dataIDArr.size() < 2) && (transaction->securityDomain == dataIDArr[1] || transaction->securityDomain == instIDArr[1]);
+
+				if (NUM_DOMAINS == 2) {
+					if (currentDomain == 0 && !isSecure0) {
+						continue;
+					} else if (currentDomain == 1 && isSecure0) {
+						continue;
+					}
+				} else if (NUM_DOMAINS == 4) {
+					if (currentDomain == 0 && !isSecure0) {
+						continue;
+					} else if (currentDomain == 1 && !isSecure1) {
+						continue;
+					} else if (currentDomain > 1 && (isSecure0 || isSecure1)) {
+						continue;
+					}
+				} else {
+					assert(false);
 				}
+
 				
 				//if we have room, break up the transaction into the appropriate commands
 				//and add them to the command queue
@@ -1035,47 +1070,53 @@ void MemoryController::update()
 					returnReadData(pendingReadTransactions[i]);
 				}
 
-				if (protection == DAG && currentPhase != -1 &&
-					(pendingReadTransactions[i]->securityDomain == iDefenceDomain || pendingReadTransactions[i]->securityDomain == old_iDefenceDomain || pendingReadTransactions[i]->securityDomain == dDefenceDomain || pendingReadTransactions[i]->securityDomain == old_dDefenceDomain)) {
-					// Update phase information
-					finishTimes[pendingReadTransactions[i]->nodeID] = currentClockCycle;
-					PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << " at time " << dec << currentClockCycle);
-					remainingInPhase--;
+				int currDomain = -1;
 
-					if (remainingInPhase == 0) {
+				if (revData.count(pendingReadTransactions[i]->securityDomain)) currDomain = revData[pendingReadTransactions[i]->securityDomain];
+				else if (revInst.count(pendingReadTransactions[i]->securityDomain)) currDomain = revInst[pendingReadTransactions[i]->securityDomain];
+				else if (revOldData.count(pendingReadTransactions[i]->securityDomain)) currDomain = revOldData[pendingReadTransactions[i]->securityDomain];
+				else if (revOldInst.count(pendingReadTransactions[i]->securityDomain)) currDomain = revOldInst[pendingReadTransactions[i]->securityDomain];
+
+				if (protection == DAG && currDomain != -1) {
+					// Update phase information
+					finishTimes[currDomain][pendingReadTransactions[i]->nodeID] = currentClockCycle;
+					PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << " at time " << dec << currentClockCycle);
+					remainingInPhase[currDomain]--;
+
+					if (remainingInPhase[currDomain] == 0) {
 						// We're done with this phase! Schedule the next.
 						// First, schedule the next nodes
 						
 						int i = 0;
 						int j = 0;
 
-						int numNew = this->dag[to_string((currentPhase+1)%totalPhases)]["node"].size();
+						int numNew = this->dag[currDomain][to_string((currentPhase[currDomain]+1)%totalPhases[currDomain])]["node"].size();
 
-						if(DEBUG_DEFENCE) PRINT("Finished Phase: " << currentPhase << ". Fake read requests issued: " << fakeReadRequestsThisPhase << " out of " << nodesThisPhase << " nodes.");
-						if(DEBUG_DEFENCE) PRINT("==== Starting new phase " << ((currentPhase+1)%totalPhases) << " ====");
+						if(DEBUG_DEFENCE) PRINT("Finished Phase: " << currentPhase[currDomain] << ". Fake read requests issued: " << (fakeReadRequestsThisPhase[currDomain]) << " out of " << (nodesThisPhase[currDomain]) << " nodes.");
+						if(DEBUG_DEFENCE) PRINT("==== Starting new phase " << ((currentPhase[currDomain]+1)%totalPhases[currDomain]) << " ====");
 
-						totalFakeReadRequests += fakeReadRequestsThisPhase;
-						totalFakeWriteRequests += fakeWriteRequestsThisPhase;
+						totalFakeReadRequests[currDomain] += fakeReadRequestsThisPhase[currDomain];
+						totalFakeWriteRequests[currDomain] += fakeWriteRequestsThisPhase[currDomain];
 
-						fakeReadRequestsThisPhase = 0;
-						fakeWriteRequestsThisPhase = 0;
-						nodesThisPhase = 0;
+						fakeReadRequestsThisPhase[currDomain] = 0;
+						fakeWriteRequestsThisPhase[currDomain] = 0;
+						nodesThisPhase[currDomain] = 0;
 
-						for (auto& newNode : this->dag[to_string((currentPhase+1)%totalPhases)]["node"].items()) {
-							remainingInPhase++;
-							nodesThisPhase++;
-							totalNodes++;
+						for (auto& newNode : this->dag[currDomain][to_string((currentPhase[currDomain]+1)%totalPhases[currDomain])]["node"].items()) {
+							remainingInPhase[currDomain]++;
+							nodesThisPhase[currDomain]++;
+							totalNodes[currDomain]++;
 
 							uint64_t scheduledTime = 0;
 
 							i = j;
-							for (auto& oldNode : this->dag[to_string(currentPhase)]["node"].items()) {
-								assert(this->dag[to_string((currentPhase+1)%totalPhases)]["edge"][to_string(i)]["sourceID"] == stoi(oldNode.key()));
-								assert(this->dag[to_string((currentPhase+1)%totalPhases)]["edge"][to_string(i)]["destID"] == stoi(newNode.key()));
+							for (auto& oldNode : this->dag[currDomain][to_string(currentPhase[currDomain])]["node"].items()) {
+								assert(this->dag[currDomain][to_string((currentPhase[currDomain]+1)%totalPhases[currDomain])]["edge"][to_string(i)]["sourceID"] == stoi(oldNode.key()));
+								assert(this->dag[currDomain][to_string((currentPhase[currDomain]+1)%totalPhases[currDomain])]["edge"][to_string(i)]["destID"] == stoi(newNode.key()));
 
-								int edgeWeight = SLACK*(int(this->dag[to_string((currentPhase+1)%totalPhases)]["edge"][to_string(i)]["latency"]))/DEF_CLK_DIV;
+								int edgeWeight = SLACK*(int(this->dag[currDomain][to_string((currentPhase[currDomain]+1)%totalPhases[currDomain])]["edge"][to_string(i)]["latency"]))/DEF_CLK_DIV;
 
-								int scheduledCandidate = edgeWeight + finishTimes[stoi(oldNode.key())];
+								int scheduledCandidate = edgeWeight + finishTimes[currDomain][stoi(oldNode.key())];
 								if (scheduledCandidate > scheduledTime) {
 									scheduledTime = scheduledCandidate;
 								}
@@ -1084,13 +1125,14 @@ void MemoryController::update()
 							}
 							j++;
 							// Avoid scheduling conflicts
-                                                        if (scheduledTime == currentClockCycle) scheduledTime++;
-							while (schedule.count(scheduledTime) > 0) scheduledTime++;
-							schedule[scheduledTime] = stoi(newNode.key());
+                            if (scheduledTime == currentClockCycle) scheduledTime++;
+							while (scheduleNode.count(scheduledTime) > 0) scheduledTime++;
+							scheduleNode[scheduledTime] = stoi(newNode.key());
+							scheduleDomain[scheduledTime] = currDomain;
 							if(DEBUG_DEFENCE) PRINT("Scheduled " << newNode.key() << " at time " << scheduledTime << " (current time " << currentClockCycle << ")");
 						}
 
-						currentPhase = (currentPhase + 1)%totalPhases;
+						currentPhase[currDomain] = (currentPhase[currDomain] + 1)%totalPhases[currDomain];
 
 					}
 
@@ -1188,7 +1230,7 @@ bool MemoryController::addTransaction(Transaction *trans)
 {
 	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain << " isWrite? " << (trans->transactionType == DATA_WRITE) << " Current Cycle: " << currentClockCycle);
 
-	if ((trans->securityDomain == iDefenceDomain || trans->securityDomain == dDefenceDomain) && currentPhase != -1) {
+	if (revData.count(trans->securityDomain) || revInst.count(trans->securityDomain)) {
 		defenceQueue.push_back(trans);
 		return true;
 	}
@@ -1274,11 +1316,13 @@ void MemoryController::printStats(bool finalStats)
 	PRINTN( "   Total Return Transactions : " << totalTransactions );
 	PRINT( " ("<<totalBytesTransferred <<" bytes) aggregate average bandwidth "<<totalBandwidth<<"GB/s");
 
-	PRINT(" ========== Defence DAG Statistics ========== ");
-	PRINT("\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests);
+	//PRINT(" ========== Defence DAG Statistics ========== ");
+	//PRINT("\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests);
 
 	if (finalStats && VIS_FILE_OUTPUT) {
-		csvOut.getOutputStream() << "\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests;
+		for (int i = 0; i < dataIDArr.size(); i++) {
+			csvOut.getOutputStream() << "\nDefence Group: " << i << std::dec << ",\nFinal Defence Nodes Executed: " << totalNodes[i] << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests[i] << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests[i];
+		}
 	}
 
 #ifdef LOG_OUTPUT

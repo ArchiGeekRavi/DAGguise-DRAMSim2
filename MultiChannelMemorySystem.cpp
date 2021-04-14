@@ -453,21 +453,32 @@ void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dD
 	if (DEBUG_DEFENCE) PRINT("Starting Defence");
 	if (protection == DAG) {
 		if (DEBUG_DEFENCE) PRINT("DAG Protection Enabled!");
-		std::ifstream i(defenceFilename.c_str());
-		i >> channels[0]->memoryController->dag;
 
-		channels[0]->memoryController->iDefenceDomain = iDefenceDomain;
-		channels[0]->memoryController->dDefenceDomain = dDefenceDomain;
+		int domainNum = channels[0]->memoryController->dataIDArr.size();
+
+		std::ifstream i(defenceFilename.c_str());
+		i >> channels[0]->memoryController->dag[domainNum];
+
+		channels[0]->memoryController->instIDArr.push_back(iDefenceDomain);
+		channels[0]->memoryController->dataIDArr.push_back(dDefenceDomain);
+
+		channels[0]->memoryController->revInst[iDefenceDomain] = domainNum;
+		channels[0]->memoryController->revData[dDefenceDomain] = domainNum;
 
 		if (DEBUG_DEFENCE) PRINT("IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
 
-		channels[0]->memoryController->initDefence();
+		channels[0]->memoryController->initDefence(domainNum);
 	} 
 	else if (protection == FixedService_BTA) {
 		if (DEBUG_DEFENCE) PRINT("BTA Protection Enabled!");
 
-		channels[0]->memoryController->iDefenceDomain = iDefenceDomain;
-		channels[0]->memoryController->dDefenceDomain = dDefenceDomain;
+		int domainNum = channels[0]->memoryController->dataIDArr.size();
+
+		channels[0]->memoryController->instIDArr.push_back(iDefenceDomain);
+		channels[0]->memoryController->dataIDArr.push_back(dDefenceDomain);
+
+		channels[0]->memoryController->revInst[iDefenceDomain] = domainNum;
+		channels[0]->memoryController->revData[dDefenceDomain] = domainNum;
 	}
 	else if (protection == FixedRate) {
 		channels[0]->memoryController->initCQDefence(iDefenceDomain, dDefenceDomain);
@@ -476,25 +487,45 @@ void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dD
 	return;
 }
 
-void MultiChannelMemorySystem::updateDefence(uint64_t oldDefence, uint64_t newDefence) 
+void MultiChannelMemorySystem::updateDefence(uint64_t oldDefence, uint64_t newDefence, bool isdata) 
 {
+	int domain;
 	if (DEBUG_DEFENCE) PRINT("Updating Defence Old: " << oldDefence << " New: " << newDefence);
-	if (protection == DAG) {
-		if (channels[0]->memoryController->iDefenceDomain == oldDefence) {
-			channels[0]->memoryController->old_iDefenceDomain = oldDefence;
-			channels[0]->memoryController->iDefenceDomain = newDefence;
-		} else if (channels[0]->memoryController->dDefenceDomain == oldDefence) {
-			channels[0]->memoryController->old_dDefenceDomain = oldDefence;
-			channels[0]->memoryController->dDefenceDomain = newDefence;
+	if (protection == DAG || protection == FixedService_BTA) {
+
+		if (isdata) {
+			domain = channels[0]->memoryController->revData[oldDefence];
+			channels[0]->memoryController->revOldData[oldDefence] = domain;
+
+			if (domain > channels[0]->memoryController->oldDataIDArr.size()) {
+				channels[0]->memoryController->oldDataIDArr.push_back(oldDefence);
+			} else {
+				channels[0]->memoryController->oldDataIDArr[domain] = oldDefence;
+			}
+
+			channels[0]->memoryController->revData[newDefence] = domain;
+			channels[0]->memoryController->dataIDArr[domain] = newDefence;
+		} else {
+			domain = channels[0]->memoryController->revInst[oldDefence];
+			channels[0]->memoryController->revOldInst[oldDefence] = domain;
+
+			if (domain > channels[0]->memoryController->oldInstIDArr.size()) {
+				channels[0]->memoryController->oldInstIDArr.push_back(oldDefence);
+			} else {
+				channels[0]->memoryController->oldInstIDArr[domain] = oldDefence;
+			}
+
+			channels[0]->memoryController->revInst[newDefence] = domain;
+			channels[0]->memoryController->instIDArr[domain] = newDefence;
 		}
-	} 
+	} /*
 	else if (protection == FixedService_BTA) {
 		if (channels[0]->memoryController->iDefenceDomain == oldDefence) {
 			channels[0]->memoryController->iDefenceDomain = newDefence;
 		} else if (channels[0]->memoryController->dDefenceDomain == oldDefence) {
 			channels[0]->memoryController->dDefenceDomain = newDefence;
 		}
-	}
+	} */
 	else if (protection == FixedRate) {
 		assert(false);
 	}
