@@ -85,6 +85,8 @@ MemoryController::MemoryController(MemorySystem *parent, CSVWriter &csvOut_, ost
 	currentDomain = 0;
 	BTAPhase = 0;
 
+        numFakeFS = 0;
+
 	/*
 	currentPhase = -1;
 	remainingInPhase = 0;
@@ -970,6 +972,9 @@ void MemoryController::update()
 					PRINT( "== Warning - No room in command queue" << endl );
 				}
 			}
+
+                        // If we skipped a valid transaction, increment the fake request counter
+                        if (transactionQueue.size() != 0) numFakeFS++;
 		}
 	}
 
@@ -1340,11 +1345,13 @@ void MemoryController::printStats(bool finalStats)
 	//PRINT(" ========== Defence DAG Statistics ========== ");
 	//PRINT("\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests);
 
-	if (finalStats && VIS_FILE_OUTPUT) {
+	if (finalStats && protection == DAG && VIS_FILE_OUTPUT) {
 		for (int i = 0; i < dataIDArr.size(); i++) {
 			csvOut.getOutputStream() << "\nDefence Group: " << i << std::dec << ",\nFinal Defence Nodes Executed: " << totalNodes[i] << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests[i] << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests[i];
 		}
-	}
+	} else if (finalStats && protection == FixedService_BTA && VIS_FILE_OUTPUT) {
+          csvOut.getOutputStream() << "\n Fake FS requests: " << numFakeFS;
+        }
 
 #ifdef LOG_OUTPUT
 	dramsim_log.flush();

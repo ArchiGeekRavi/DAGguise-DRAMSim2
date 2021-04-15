@@ -112,6 +112,8 @@ public:
 
 	vector<int> totalNodes;
 
+        int numFakeFS;
+
 	//fields
 	vector<Transaction *> transactionQueue;
 	vector<Transaction *> defenceQueue;
