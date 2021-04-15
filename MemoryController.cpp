@@ -687,8 +687,9 @@ void MemoryController::update()
 			// Search the defence queue for a match...
 			for (size_t i=0; i<defenceQueue.size(); i++) {
 				transaction = defenceQueue[i];
-                                //PRINT("Defence queue occupant: index: " << i << " address: " << transaction->address << " secdom " << transaction->securityDomain);
+                                //PRINT("Defence queue occupant: index: " << i << " address: " << hex << transaction->address << " secdom " << dec << transaction->securityDomain);
                                 //PRINT("Curr domain: " << dataID << " " << instID);
+                                //PRINT("Old domain: " << oldDataID << " " << oldInstID);
 
 				if (transaction->securityDomain != dataID && transaction->securityDomain != instID && transaction->securityDomain != oldDataID && transaction->securityDomain != oldInstID) continue;
 

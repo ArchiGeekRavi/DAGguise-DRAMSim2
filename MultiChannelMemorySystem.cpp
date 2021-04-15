@@ -100,6 +100,11 @@ MultiChannelMemorySystem::MultiChannelMemorySystem(const string &deviceIniFilena
 		MemorySystem *channel = new MemorySystem(i, megsOfMemory/NUM_CHANS, (*csvOut), dramsim_log);
 		channels.push_back(channel);
 	}
+
+        for (int i = 0; i < 4; i++) {
+            channels[0]->memoryController->oldDataIDArr.push_back(-1);
+            channels[0]->memoryController->oldInstIDArr.push_back(-1);
+        }
 }
 /* Initialize the ClockDomainCrosser to use the CPU speed 
 	If cpuClkFreqHz == 0, then assume a 1:1 ratio (like for TraceBasedSim)
