@@ -83,9 +83,13 @@ public:
 		commandQueue.dDefenceDomain = dDomain;
 	}
 
-	map<int, map<int, uint64_t>> finishTimes;
-	map<uint64_t, int> scheduleNode;
+	vector<vector<map<int,vector<int>>>> parentList;
+	vector<vector<map<int,vector<int>>>> childrenList;
+	vector<vector<map<int,map<int, int>>>> weightList; //[parent][child]
+	vector<vector<map<int,uint64_t>>> finishTimes;
+
 	map<uint64_t, int> scheduleDomain;
+	map<uint64_t, int> scheduleNode;
 
 	vector<int> dataIDArr;
 	vector<int> instIDArr;
@@ -99,13 +103,10 @@ public:
 	map<int,int> revOldData;
 	map<int,int> revOldInst;
 	
-	vector<int> currentPhase;
-	vector<int> remainingInPhase;
-	vector<int> totalPhases;
+	vector<int> numLoops;
 
-	vector<int> fakeReadRequestsThisPhase;
-	vector<int> fakeWriteRequestsThisPhase;
-	vector<int> nodesThisPhase;
+	vector<int> currentLoop;
+	vector<int> currentLoopIteration;
 
 	vector<int> totalFakeReadRequests;
 	vector<int> totalFakeWriteRequests;
