@@ -721,6 +721,7 @@ void MemoryController::update()
 			if (readID == -1) {
 				if(DEBUG_DEFENCE) PRINT("No matching read transaction, enqueuing fake request")
 
+				totalFakeReadRequests[scheduledDomain]++;
 				readTransaction = new Transaction(DATA_READ, 0, nullptr, dataID, scheduledNode, true, scheduledBank);
 				readTransaction->timeAdded = currentClockCycle;
 			} 
@@ -729,7 +730,8 @@ void MemoryController::update()
 			if(writeRequested) {
 				if (writeID == -1) {
 					if(DEBUG_DEFENCE) PRINT("No matching write transaction, enqueuing fake request")
-                                        
+
+					totalFakeWriteRequests[scheduledDomain]++;                    
 					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dataID, scheduledNode, true, writeBank);
 					writeTransaction->timeAdded = currentClockCycle;
 				}
@@ -1103,12 +1105,6 @@ void MemoryController::update()
 					int loopID = currentLoop[currDomain];
 					finishTimes[currDomain][loopID][pendingReadTransactions[i]->nodeID] = currentClockCycle;
 
-					// Update stats
-					if (pendingReadTransactions[i]->isFake && pendingReadTransactions[i]->transactionType == DATA_READ) {
-						totalFakeReadRequests[currDomain]++;
-					} else if (pendingReadTransactions[i]->isFake && pendingReadTransactions[i]->transactionType == DATA_WRITE) {
-						totalFakeWriteRequests[currDomain]++;
-					}
 					totalNodes[currDomain]++;
 					if (pendingReadTransactions[i]->nodeID == this->dag[currDomain][to_string(loopID)]["node"].size() - 1) {
 						// We've reached the end of the loop! 
