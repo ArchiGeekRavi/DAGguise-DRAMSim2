@@ -214,7 +214,7 @@ void MemoryController::initDefence(int domainID)
 	scheduleNode[scheduledTime] = 0;
 	scheduleDomain[scheduledTime] = domainID;
 
-	if(DEBUG_DEFENCE) PRINT("Initializing Defence!");
+	PRINT("Initializing Defence!");
 }
 
 void MemoryController::stopDefence()
@@ -657,7 +657,7 @@ void MemoryController::update()
 		int scheduledNode, scheduledDomain;
 
 		if (scheduleNode.count(currentClockCycle)) {
-			PRINT("Executing scheduled node\n");
+			if (DEBUG_DEFENCE) PRINT("Executing scheduled node\n");
 			// Determine the scheduled defence node's information
 			scheduledNode = scheduleNode[currentClockCycle];
 			scheduledDomain = scheduleDomain[currentClockCycle];
@@ -672,7 +672,7 @@ void MemoryController::update()
 				oldDataID = oldDataIDArr[scheduledDomain];
 				oldInstID = oldInstIDArr[scheduledDomain];
 			}
-			PRINT("currloop" << to_string(currentLoop[scheduledDomain]) << " curcycle " << currentClockCycle << " transqueue " << transactionQueue.size()) ;
+			if (DEBUG_DEFENCE) PRINT("currloop" << to_string(currentLoop[scheduledDomain]) << " curcycle " << currentClockCycle << " transqueue " << transactionQueue.size()) ;
 			scheduledBank = this->dag[scheduledDomain][to_string(currentLoop[scheduledDomain])]["node"][scheduledNode]["bankID"];
 			Transaction *transaction;
 
@@ -1099,7 +1099,7 @@ void MemoryController::update()
 				else if (revOldInst.count(pendingReadTransactions[i]->securityDomain)) currDomain = revOldInst[pendingReadTransactions[i]->securityDomain];
 
 				if (protection == DAG && currDomain != -1) {
-					PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << "(node " << pendingReadTransactions[i]->nodeID << " at time " << dec << currentClockCycle << " in domain " << currDomain);
+					if (DEBUG_DEFENCE) PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << "(node " << pendingReadTransactions[i]->nodeID << " at time " << dec << currentClockCycle << " in domain " << currDomain);
 
 					// Update phase information
 					int loopID = currentLoop[currDomain];
@@ -1111,12 +1111,12 @@ void MemoryController::update()
 						// Check if we're repeating the section, or starting a new one.
 						if (currentLoopIteration[currDomain]+1 == this->dag[currDomain][to_string(loopID)]["loop"]) {
 							// We're done here, move to next block
-							PRINT("Finished loop body, moving to loop " << (currentLoop[currDomain] + 1) % this->dag[currDomain].size());
+							if (DEBUG_DEFENCE) PRINT("Finished loop body, moving to loop " << (currentLoop[currDomain] + 1) % this->dag[currDomain].size());
 							currentLoop[currDomain] = (currentLoop[currDomain] + 1) % this->dag[currDomain].size();
 							currentLoopIteration[currDomain] = 0;
 						} else {
 							// We're looping!
-							PRINT("Looping!");
+							if (DEBUG_DEFENCE) PRINT("Looping!");
 							currentLoopIteration[currDomain]++;
 							// If we haven't looped before, we'll have to set our target.
 							if (childrenList[currDomain][loopID][pendingReadTransactions[i]->nodeID].size() == 0) {
@@ -1135,10 +1135,10 @@ void MemoryController::update()
 						// If all parents of the child are complete, we can issue it!
 						bool ready = true;
 						for (auto& parent : parentList[currDomain][loopID][child]) {
-							PRINT("Parent: " << parent << " Child: " << child);
+							if (DEBUG_DEFENCE) PRINT("Parent: " << parent << " Child: " << child);
 
 							if (finishTimes[currDomain][loopID][parent] > currentClockCycle) {
-								PRINT("NOT READY!");
+								if (DEBUG_DEFENCE) PRINT("NOT READY!");
 								ready = false;
 								break;
 							}							
@@ -1152,7 +1152,7 @@ void MemoryController::update()
 							while (scheduleNode.count(scheduledTime) > 0) scheduledTime++;
 							scheduleNode[scheduledTime] = child;
 							scheduleDomain[scheduledTime] = currDomain;
-							PRINT("Issuing new node " << child << " at time" << scheduledTime);
+							if (DEBUG_DEFENCE) PRINT("Issuing new node " << child << " at time" << scheduledTime);
 
 						}
 					}
@@ -1252,7 +1252,7 @@ bool MemoryController::addTransaction(Transaction *trans)
 	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain << " isWrite? " << (trans->transactionType == DATA_WRITE) << " Current Cycle: " << currentClockCycle);
 
 	if (protection == DAG && (revData.count(trans->securityDomain) || revInst.count(trans->securityDomain))) {
-    	PRINT("PUSHED!")
+    	        if (DEBUG_DEFENCE) PRINT("PUSHED!")
 		defenceQueue.push_back(trans);
 		return true;
 	}

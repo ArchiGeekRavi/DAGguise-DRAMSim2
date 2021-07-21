@@ -453,23 +453,26 @@ bool MultiChannelMemorySystem::addTransaction(bool isWrite, uint64_t addr, uint6
 	return channels[channelNumber]->addTransaction(isWrite, addr, securityDomain); 
 }
 
-void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dDefenceDomain) 
+void MultiChannelMemorySystem::startDefence(uint64_t cpuid, uint64_t iDefenceDomain, uint64_t dDefenceDomain) 
 {
 	if (DEBUG_DEFENCE) PRINT("Starting Defence");
 	if (protection == DAG) {
 		if (DEBUG_DEFENCE) PRINT("DAG Protection Enabled!");
 
-		int domainNum = channels[0]->memoryController->dataIDArr.size();
+		int domainNum = cpuid;
 
-		std::ifstream i(defenceFilename.c_str());
-		std::ifstream i2(defenceFilename2.c_str());
+                std::istringstream ss(defenceFilename);
+                std::string token;
+                
+                for(int i = 0; i <= domainNum; i++) {
+                  std::getline(ss, token, ';');
+                }
+
+		std::ifstream i(token);
 
                 json j;
-                if (domainNum == 0) {
-		  i >> j;
-                } else {
-                  i2 >> j;
-                }
+                i >> j;
+
                 channels[0]->memoryController->dag.push_back(j); 
 
 		channels[0]->memoryController->instIDArr.push_back(iDefenceDomain);
@@ -478,7 +481,7 @@ void MultiChannelMemorySystem::startDefence(uint64_t iDefenceDomain, uint64_t dD
 		channels[0]->memoryController->revInst[iDefenceDomain] = domainNum;
 		channels[0]->memoryController->revData[dDefenceDomain] = domainNum;
 
-		if (DEBUG_DEFENCE) PRINT("IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
+		PRINT("CPUID: " << cpuid << "DefenceFile: " << token << "IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
 
 		channels[0]->memoryController->initDefence(domainNum);
 	} 

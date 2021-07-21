@@ -51,7 +51,7 @@ class MultiChannelMemorySystem : public SimulatorObject
 			bool addTransaction(const Transaction &trans);
 			bool addTransaction(bool isWrite, uint64_t addr, uint64_t securityDomain);
 			bool willAcceptTransaction(); 
-			void startDefence(uint64_t iDefenceDomain, uint64_t dDefenceDomain);
+			void startDefence(uint64_t cpuid, uint64_t iDefenceDomain, uint64_t dDefenceDomain);
 			void updateDefence(uint64_t oldDomain, uint64_t newDomain, bool isdata);
 			void endDefence();
 			bool willAcceptTransaction(uint64_t addr); 
