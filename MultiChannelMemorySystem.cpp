@@ -459,12 +459,12 @@ void MultiChannelMemorySystem::startDefence(uint64_t cpuid, uint64_t iDefenceDom
 	if (protection == DAG) {
 		if (DEBUG_DEFENCE) PRINT("DAG Protection Enabled!");
 
-		int domainNum = cpuid;
+		int domainNum = channels[0]->memoryController->dag.size();
 
                 std::istringstream ss(defenceFilename);
                 std::string token;
                 
-                for(int i = 0; i <= domainNum; i++) {
+                for(int i = 0; i <= cpuid; i++) {
                   std::getline(ss, token, ';');
                 }
 

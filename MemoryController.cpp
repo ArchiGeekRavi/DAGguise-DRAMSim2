@@ -845,6 +845,9 @@ void MemoryController::update()
 			// Search for transaction we can issue
 			currentDomain = (currentDomain + 1) % NUM_DOMAINS;
 			BTAPhase = (BTAPhase + 1) % 3;
+                        
+                        // Speculatively increment the fake FS counter (decrement it later if we were wrong) 
+                        numFakeFS++;
 			
                         //if (!SINGLE_BANK) PRINT("BTA PHASE: " << BTAPhase);
                         //PRINT("CURRENT DOMAIN: " << currentDomain);
@@ -868,20 +871,15 @@ void MemoryController::update()
 				assert(NUM_DOMAINS % 2 == 0);
 
 				if (!SINGLE_BANK) {
-
 					if (newTransactionBank % 3 != BTAPhase) {
 						continue;
 					}
 				}
 
-                                //PRINT(transaction->securityDomain);
-                                /*if (dataIDArr.size() >= 1) {
-                                  PRINT(dataIDArr[0]);
-                                  PRINT(instIDArr[0]);
-                                }*/
-
 				bool isSecure0 = !(dataIDArr.size() < 1) && (transaction->securityDomain == dataIDArr[0] || transaction->securityDomain == instIDArr[0]);
 				bool isSecure1 = !(dataIDArr.size() < 2) && (transaction->securityDomain == dataIDArr[1] || transaction->securityDomain == instIDArr[1]);
+				bool isSecure2 = !(dataIDArr.size() < 3) && (transaction->securityDomain == dataIDArr[2] || transaction->securityDomain == instIDArr[2]);
+				bool isSecure3 = !(dataIDArr.size() < 4) && (transaction->securityDomain == dataIDArr[3] || transaction->securityDomain == instIDArr[3]);
 
 				if (NUM_DOMAINS == 2) {
 					if (currentDomain == 0 && !isSecure0) {
@@ -897,10 +895,18 @@ void MemoryController::update()
 					} else if (currentDomain > 1 && (isSecure0 || isSecure1)) {
 						continue;
 					}
-				} else {
+				} else if (NUM_DOMAINS == 8) {
+                                       if (currentDomain == 0 && !isSecure0) continue;
+                                       else if (currentDomain == 1 && !isSecure1) continue;
+                                       else if (currentDomain == 2 && !isSecure2) continue;
+                                       else if (currentDomain == 3 && !isSecure3) continue;
+                                       else if (currentDomain > 3 && (isSecure0 || isSecure1 || isSecure2 || isSecure3)) continue;
+                                } else {
 					assert(false);
 				}
 
+                                // If we've gotten this far, we'll issue. Thus, we're issuing a real request.
+                                numFakeFS--;
 				
 				//if we have room, break up the transaction into the appropriate commands
 				//and add them to the command queue
@@ -969,8 +975,6 @@ void MemoryController::update()
 				}
 			}
 
-                        // If we skipped a valid transaction, increment the fake request counter
-                        if (transactionQueue.size() != 0) numFakeFS++;
 		}
 	}
 
@@ -1342,6 +1346,8 @@ void MemoryController::printStats(bool finalStats)
 	//PRINT("\nFinal Defence Nodes Executed: " << std::dec << totalNodes << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests);
 
 	if (finalStats && protection == DAG && VIS_FILE_OUTPUT) {
+                csvOut.getOutputStream() << "Total Bytes Transferred: " << totalBytesTransferred << "\n";
+                csvOut.getOutputStream() << "Aggregate Average Bandwidth (GB/s): " << totalBandwidth << "\n";
 		for (int i = 0; i < dataIDArr.size(); i++) {
 			csvOut.getOutputStream() << "\nDefence Group: " << i << std::dec << ",\nFinal Defence Nodes Executed: " << totalNodes[i] << ",\nNumber of Fake Read Requests: " << totalFakeReadRequests[i] << ",\nNumber of Fake Write Requests: " << totalFakeWriteRequests[i];
 		}
