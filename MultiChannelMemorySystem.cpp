@@ -42,7 +42,7 @@
 using namespace DRAMSim; 
 
 
-MultiChannelMemorySystem::MultiChannelMemorySystem(const string &deviceIniFilename_, const string &systemIniFilename_, const string &pwd_, const string &traceFilename_, const string &defenceFilename_, const string &defenceFilename2_, unsigned megsOfMemory_, string *visFilename_, const IniReader::OverrideMap *paramOverrides)
+MultiChannelMemorySystem::MultiChannelMemorySystem(const string &deviceIniFilename_, const string &systemIniFilename_, const string &pwd_, const string &traceFilename_, const string &defenceFilename_, const string &defenceFilename2_, unsigned megsOfMemory_, const string &visFilename_, const IniReader::OverrideMap *paramOverrides)
 	:megsOfMemory(megsOfMemory_), deviceIniFilename(deviceIniFilename_),
 	systemIniFilename(systemIniFilename_), traceFilename(traceFilename_), defenceFilename(defenceFilename_), defenceFilename2(defenceFilename2_),
 	pwd(pwd_), visFilename(visFilename_), 
@@ -51,9 +51,6 @@ MultiChannelMemorySystem::MultiChannelMemorySystem(const string &deviceIniFilena
 {
 	currentClockCycle=0; 
 	nextFRClockCycle=0;
-
-	if (visFilename)
-		printf("CC VISFILENAME=%s\n",visFilename->c_str());
 
 	if (!isPowerOfTwo(megsOfMemory))
 	{
@@ -211,7 +208,7 @@ void MultiChannelMemorySystem::InitOutputFiles(string traceFilename)
 		string path;
 		string filename;
 
-		if (!visFilename)
+		if (visFilename[0] == '\0')
 		{
 			path = "results/";
 			// chop off the .ini if it's there
@@ -267,7 +264,7 @@ void MultiChannelMemorySystem::InitOutputFiles(string traceFilename)
 		}
 		else //visFilename given
 		{
-			out << *visFilename;
+			out << visFilename;
 		}
 		if (sim_description)
 		{
@@ -642,7 +639,7 @@ int MultiChannelMemorySystem::getIniFloat(const std::string& field, float *val)
 }
 
 namespace DRAMSim {
-MultiChannelMemorySystem *getMemorySystemInstance(const string &dev, const string &sys, const string &pwd, const string &trc, const string &def, const string &def2, unsigned megsOfMemory, string *visfilename) 
+MultiChannelMemorySystem *getMemorySystemInstance(const string &dev, const string &sys, const string &pwd, const string &trc, const string &def, const string &def2, unsigned megsOfMemory, const string &visfilename) 
 {
 	return new MultiChannelMemorySystem(dev, sys, pwd, trc, def, def2, megsOfMemory, visfilename);
 }
