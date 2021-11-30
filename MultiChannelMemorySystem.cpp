@@ -450,14 +450,17 @@ bool MultiChannelMemorySystem::addTransaction(bool isWrite, uint64_t addr, uint6
 	return channels[channelNumber]->addTransaction(isWrite, addr, securityDomain); 
 }
 
+// Triggered by defence magic instruction in victim program
 void MultiChannelMemorySystem::startDefence(uint64_t cpuid, uint64_t iDefenceDomain, uint64_t dDefenceDomain) 
 {
 	if (DEBUG_DEFENCE) PRINT("Starting Defence");
 	if (protection == DAG) {
 		if (DEBUG_DEFENCE) PRINT("DAG Protection Enabled!");
 
+                // Determine the protection domain mapping
 		int domainNum = channels[0]->memoryController->dag.size();
 
+                // Read in defense DAG json file
                 std::istringstream ss(defenceFilename);
                 std::string token;
                 
@@ -472,6 +475,7 @@ void MultiChannelMemorySystem::startDefence(uint64_t cpuid, uint64_t iDefenceDom
 
                 channels[0]->memoryController->dag.push_back(j); 
 
+                // Record protection domain <-> CPU mapping
 		channels[0]->memoryController->instIDArr.push_back(iDefenceDomain);
 		channels[0]->memoryController->dataIDArr.push_back(dDefenceDomain);
 
@@ -487,6 +491,7 @@ void MultiChannelMemorySystem::startDefence(uint64_t cpuid, uint64_t iDefenceDom
 
 		int domainNum = channels[0]->memoryController->dataIDArr.size();
 
+                // Record protection domain <-> CPU mapping
 		channels[0]->memoryController->instIDArr.push_back(iDefenceDomain);
 		channels[0]->memoryController->dataIDArr.push_back(dDefenceDomain);
 
@@ -494,12 +499,15 @@ void MultiChannelMemorySystem::startDefence(uint64_t cpuid, uint64_t iDefenceDom
 		channels[0]->memoryController->revData[dDefenceDomain] = domainNum;
 	}
 	else if (protection == FixedRate) {
+                // DEPRECATED
 		channels[0]->memoryController->initCQDefence(iDefenceDomain, dDefenceDomain);
 	}
 	 
 	return;
 }
 
+// This function is called when the CPU type switches (ex. after fast-forwarding)
+// It ensures that the "security domain" of the "physical" CPU remains correct across type switches
 void MultiChannelMemorySystem::updateDefence(uint64_t oldDefence, uint64_t newDefence, bool isdata) 
 {
 	int domain;

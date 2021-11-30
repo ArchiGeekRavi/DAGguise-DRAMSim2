@@ -566,6 +566,7 @@ void MemoryController::update()
 
 	}
 
+        // For regular protection domains, do nothing special
 	if (protection == Regular || protection == FixedService_Channel || protection == FixedRate) {
 		for (size_t i=0;i<transactionQueue.size();i++)
 		{
@@ -650,6 +651,7 @@ void MemoryController::update()
 				//PRINT( "== Warning - No room in command queue" << endl;
 			}
 		}
+          // DAGguise Protection Logic
 	} else if (protection == DAG) {
 
 		// First, check if we have anything scheduled
@@ -658,10 +660,12 @@ void MemoryController::update()
 
 		if (scheduleNode.count(currentClockCycle)) {
 			if (DEBUG_DEFENCE) PRINT("Executing scheduled node\n");
-			// Determine the scheduled defence node's information
+			
+                        // Determine the scheduled defence node's information
 			scheduledNode = scheduleNode[currentClockCycle];
 			scheduledDomain = scheduleDomain[currentClockCycle];
 
+                        // Determine CPU -> Security Domain Mapping
 			int dataID = dataIDArr[scheduledDomain];
 			int instID = instIDArr[scheduledDomain];
 
@@ -672,8 +676,12 @@ void MemoryController::update()
 				oldDataID = oldDataIDArr[scheduledDomain];
 				oldInstID = oldInstIDArr[scheduledDomain];
 			}
+
 			if (DEBUG_DEFENCE) PRINT("currloop" << to_string(currentLoop[scheduledDomain]) << " curcycle " << currentClockCycle << " transqueue " << transactionQueue.size()) ;
+
+                        // Determine the scheduled bank to read from
 			scheduledBank = this->dag[scheduledDomain][to_string(currentLoop[scheduledDomain])]["node"][scheduledNode]["bankID"];
+
 			Transaction *transaction;
 
 			Transaction *readTransaction;
@@ -682,6 +690,7 @@ void MemoryController::update()
 			Transaction *writeTransaction;
 			int writeID = -1;
 
+                        // Check if we also need to write 
 			int writeRequested = this->dag[scheduledDomain][to_string(currentLoop[scheduledDomain])]["node"][scheduledNode]["combinedWB"];
 			int writeBank = this->dag[scheduledDomain][to_string(currentLoop[scheduledDomain])]["node"][scheduledNode]["combinedWBBankID"];
 			
@@ -691,25 +700,27 @@ void MemoryController::update()
 			for (size_t i=0; i<defenceQueue.size(); i++) {
 				transaction = defenceQueue[i];
 
+                                // If this entry doesn't match our security domain requirements, skip it
 				if (transaction->securityDomain != dataID && transaction->securityDomain != instID && transaction->securityDomain != oldDataID && transaction->securityDomain != oldInstID) continue;
-
+                                // Calculate the address mapping
 				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
-
+          
+                                // If we're doing a single bank simulation, map everything to bank 0
 				if (SINGLE_BANK) newTransactionBank = 0;
 
-				// First we need to find a read
+				// Did we find a matching read transaction?
 				if (transaction->transactionType == DATA_READ && readID == -1 && scheduledBank == newTransactionBank) {
 					readTransaction = transaction;
 					readID = i;
                     defenceQueue.erase(defenceQueue.begin()+readID);
                     i--;
-				} 
+				} // Maybe a matching write transaction instead? 
 				else if (transaction->transactionType == DATA_WRITE && writeID == -1 && writeRequested && writeBank == newTransactionBank) {
 					writeTransaction = transaction;
 					writeID = i;
                 	defenceQueue.erase(defenceQueue.begin()+writeID);
                     i--;
-				}
+				} // If neither, go to the next
 				else continue;
 
 				transaction->nodeID = scheduledNode;
@@ -718,6 +729,7 @@ void MemoryController::update()
 
 			}
 
+                        // Issue fake read request, if no matching transactions found
 			if (readID == -1) {
 				if(DEBUG_DEFENCE) PRINT("No matching read transaction, enqueuing fake request")
 
@@ -726,7 +738,8 @@ void MemoryController::update()
 				readTransaction->timeAdded = currentClockCycle;
 			} 
 			transactionQueue.push_back(readTransaction);
-
+  
+                        // If we need to issue a write request, and no matching request was found, issue one of those as well
 			if(writeRequested) {
 				if (writeID == -1) {
 					if(DEBUG_DEFENCE) PRINT("No matching write transaction, enqueuing fake request")
@@ -757,6 +770,8 @@ void MemoryController::update()
 			// pass these in as references so they get set by the addressMapping function
 			addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
 
+                        // Again, map all single bank tests to bank 0, and mark fake transactions as special
+                        // This is done so we don't accidentally return fake requests to the CPU!
 			if (SINGLE_BANK) newTransactionBank = 0;
 			else if (transaction->isFake) newTransactionBank = transaction->fakeBank;
                         //PRINT("index " << i << " contains address" << transaction->address);
@@ -829,7 +844,8 @@ void MemoryController::update()
 		}
 	}
 	else {
-
+  
+                // Do the FS-BTA cyclewise math (as outlined in their paper)
 		int skip = 1;
 		if (protection == FixedService_Rank && currentClockCycle % 7 == 0) {
 			skip = 0;
@@ -876,11 +892,13 @@ void MemoryController::update()
 					}
 				}
 
+                                // Calculate the security domain status of the current transaction
 				bool isSecure0 = !(dataIDArr.size() < 1) && (transaction->securityDomain == dataIDArr[0] || transaction->securityDomain == instIDArr[0]);
 				bool isSecure1 = !(dataIDArr.size() < 2) && (transaction->securityDomain == dataIDArr[1] || transaction->securityDomain == instIDArr[1]);
 				bool isSecure2 = !(dataIDArr.size() < 3) && (transaction->securityDomain == dataIDArr[2] || transaction->securityDomain == instIDArr[2]);
 				bool isSecure3 = !(dataIDArr.size() < 4) && (transaction->securityDomain == dataIDArr[3] || transaction->securityDomain == instIDArr[3]);
 
+                                // Now, check if we can issue it!
 				if (NUM_DOMAINS == 2) {
 					if (currentDomain == 0 && !isSecure0) {
 						continue;
