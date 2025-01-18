@@ -635,7 +635,8 @@ void CommandQueue::print()
 			PRINT(" = Rank " << i );
 			for (size_t j=0;j<NUM_BANKS;j++)
 			{
-				PRINT("    Bank "<< j << "   size : " << queues[i][j].size() );
+				// @Ravi: Added currentClockCycle to the print statement
+				PRINT("    Bank "<< j << "   size : " << queues[i][j].size() << "   current cycle : " << currentClockCycle);
 
 				for (size_t k=0;k<queues[i][j].size();k++)
 				{

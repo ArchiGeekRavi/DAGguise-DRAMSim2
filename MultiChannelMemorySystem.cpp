@@ -447,6 +447,8 @@ bool MultiChannelMemorySystem::addTransaction(Transaction *trans)
 bool MultiChannelMemorySystem::addTransaction(bool isWrite, uint64_t addr, uint64_t securityDomain)
 {
 	unsigned channelNumber = findChannelNumber(addr); 
+
+	PRINT("MultiChannelMemorySystem::addTransaction Function: << isWrite: " << isWrite << " addr: " << addr << " securityDomain: " << securityDomain);
 	return channels[channelNumber]->addTransaction(isWrite, addr, securityDomain); 
 }
 
@@ -482,7 +484,7 @@ void MultiChannelMemorySystem::startDefence(uint64_t cpuid, uint64_t iDefenceDom
 		channels[0]->memoryController->revInst[iDefenceDomain] = domainNum;
 		channels[0]->memoryController->revData[dDefenceDomain] = domainNum;
 
-		PRINT("CPUID: " << cpuid << "DefenceFile: " << token << "IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
+		PRINT("CPUID: " << cpuid << " DefenceFile: " << token << " IDefenceDomain: " << iDefenceDomain << " DDefenceDomain: " << dDefenceDomain);
 
 		channels[0]->memoryController->initDefence(domainNum);
 	} 

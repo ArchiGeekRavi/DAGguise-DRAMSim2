@@ -143,7 +143,8 @@ void MemoryController::receiveFromBus(BusPacket *bpacket)
 
 	if (DEBUG_BUS)
 	{
-		PRINTN(" -- MC Receiving From Data Bus : ");
+		//@Ravi: Added currentClockCycle at print
+		PRINTN(" -- MC Receiving From Data Bus at cycle " << currentClockCycle << " : ");
 		bpacket->print();
 	}
 
@@ -170,7 +171,62 @@ void MemoryController::attachRanks(vector<Rank *> *ranks)
 	this->ranks = ranks;
 }
 
-//gives the memory controller a handle on the rank objects
+// //gives the memory controller a handle on the rank objects
+// void MemoryController::initDefence(int domainID)
+// {
+// 	/* Create bookkeeping maps for convenience */
+// 	numLoops.push_back(this->dag[domainID].size());
+// 	currentLoop.push_back(0);
+// 	currentLoopIteration.push_back(0);
+
+// 	parentList.push_back(vector<map<int,vector<int>>>());
+// 	childrenList.push_back(vector<map<int,vector<int>>>());
+// 	weightList.push_back(vector<map<int,map<int, int>>>());
+// 	finishTimes.push_back(vector<map<int,uint64_t>>());
+
+// 	totalNodes.push_back(0);
+// 	totalFakeReadRequests.push_back(0);
+// 	totalFakeWriteRequests.push_back(0);
+
+
+//     // Determine lineages
+// 	for (int i = 0; i < numLoops[domainID]; i++) { // Per loop
+// 		parentList[domainID].push_back(map<int,vector<int>>());
+// 		childrenList[domainID].push_back(map<int,vector<int>>());
+// 		weightList[domainID].push_back(map<int,map<int, int>>());
+// 		finishTimes[domainID].push_back(map<int,uint64_t>());
+
+// 		for (auto& edge : this->dag[domainID][to_string(i)]["edge"].items()) {
+// 			int srcNode = edge.value()["sourceID"];
+// 			int destNode = edge.value()["destID"];
+// 			parentList[domainID][i][destNode].push_back(srcNode);
+// 			childrenList[domainID][i][srcNode].push_back(destNode);
+// 			weightList[domainID][i][srcNode][destNode] = edge.value()["latency"];
+// 		}
+
+// 		for (auto& node : this->dag[domainID][to_string(i)]["node"].items()) {
+// 			finishTimes[domainID][i][node.value()["nodeID"]] = std::numeric_limits<uint64_t>::max();
+// 		}
+// 	}
+
+// 	// Immediately schedule the initial node 
+// 	int scheduledTime = currentClockCycle + 1;
+// 	while (scheduleNode.count(scheduledTime) > 0) scheduledTime++;
+// 	scheduleNode[scheduledTime] = 0;
+// 	scheduleDomain[scheduledTime] = domainID;
+
+// 	//@Ravi:
+// 	printf("MemoryController::initDefence: domainID = %d\n", domainID);
+// 	printf("MemoryController::initDefence: scheduledTime = %d\n", scheduledTime);
+// 	printf("MemoryController::initDefence: scheduleNode[scheduledTime] = %d\n", scheduleNode[scheduledTime]);
+// 	printf("MemoryController::initDefence: scheduleDomain[scheduledTime] = %d\n", scheduleDomain[scheduledTime]);
+
+
+
+// 	PRINT("Initializing Defence!");
+// }
+
+//@Ravi: Debugging
 void MemoryController::initDefence(int domainID)
 {
 	/* Create bookkeeping maps for convenience */
@@ -178,24 +234,28 @@ void MemoryController::initDefence(int domainID)
 	currentLoop.push_back(0);
 	currentLoopIteration.push_back(0);
 
-	parentList.push_back(vector<map<int,vector<int>>>());
-	childrenList.push_back(vector<map<int,vector<int>>>());
-	weightList.push_back(vector<map<int,map<int, int>>>());
-	finishTimes.push_back(vector<map<int,uint64_t>>());
+	parentList.push_back(vector<map<int, vector<int>>>());
+	childrenList.push_back(vector<map<int, vector<int>>>());
+	weightList.push_back(vector<map<int, map<int, int>>>());
+	finishTimes.push_back(vector<map<int, uint64_t>>());
 
 	totalNodes.push_back(0);
 	totalFakeReadRequests.push_back(0);
 	totalFakeWriteRequests.push_back(0);
 
+	// Debug: Print initial bookkeeping maps
+	//printf("Debug: numLoops[%d] = %d\n", domainID, numLoops[domainID]);
 
-    // Determine lineages
-	for (int i = 0; i < numLoops[domainID]; i++) { // Per loop
-		parentList[domainID].push_back(map<int,vector<int>>());
-		childrenList[domainID].push_back(map<int,vector<int>>());
-		weightList[domainID].push_back(map<int,map<int, int>>());
-		finishTimes[domainID].push_back(map<int,uint64_t>());
+	// Determine lineages
+	for (int i = 0; i < numLoops[domainID]; i++)
+	{ // Per loop
+		parentList[domainID].push_back(map<int, vector<int>>());
+		childrenList[domainID].push_back(map<int, vector<int>>());
+		weightList[domainID].push_back(map<int, map<int, int>>());
+		finishTimes[domainID].push_back(map<int, uint64_t>());
 
-		for (auto& edge : this->dag[domainID][to_string(i)]["edge"].items()) {
+		for (auto &edge : this->dag[domainID][to_string(i)]["edge"].items())
+		{
 			int srcNode = edge.value()["sourceID"];
 			int destNode = edge.value()["destID"];
 			parentList[domainID][i][destNode].push_back(srcNode);
@@ -203,19 +263,93 @@ void MemoryController::initDefence(int domainID)
 			weightList[domainID][i][srcNode][destNode] = edge.value()["latency"];
 		}
 
-		for (auto& node : this->dag[domainID][to_string(i)]["node"].items()) {
+		for (auto &node : this->dag[domainID][to_string(i)]["node"].items())
+		{
 			finishTimes[domainID][i][node.value()["nodeID"]] = std::numeric_limits<uint64_t>::max();
 		}
 	}
 
-	// Immediately schedule the initial node 
+	// Debug: Print lineage structures
+	// printf("Debug: Lineages for domainID = %d\n", domainID);
+	// for (int i = 0; i < numLoops[domainID]; i++)
+	// {
+	// 	printf("Loop %d:\n", i);
+	// 	printf("  Parent List:\n");
+
+	// 	for (auto &pair : parentList[domainID][i]) {
+	// 		int node = pair.first;
+	// 		vector<int> parents = pair.second;
+	// 		printf("    Node %d: ", node);
+	// 		for (int parent : parents)
+	// 		{
+	// 			printf("%d ", parent);
+	// 		}
+	// 		printf("\n");
+	// 	}
+
+	// 	printf("  Children List:\n");
+	// 	for (auto &pair : childrenList[domainID][i]) {
+	// 		int node = pair.first;
+	// 		vector<int> children = pair.second;
+	// 		printf("    Node %d: ", node);
+	// 		for (int child : children)
+	// 		{
+	// 			printf("%d ", child);
+	// 		}
+	// 		printf("\n");
+	// 	}
+
+	// 	printf("  Weight List:\n");
+	// 	for (auto &pair : weightList[domainID][i])
+	// 	{
+	// 		int srcNode = pair.first;
+	// 		map<int, int> destMap = pair.second;
+	// 		printf("    Node %d:\n", srcNode);
+	// 		// for (auto &[destNode, weight] : destMap)
+	// 		for (auto &pair : destMap)
+	// 		{
+	// 			int destNode = pair.first;
+	// 			int weight = pair.second;
+	// 			printf("      %d -> %d: %d\n", srcNode, destNode, weight);
+	// 		}
+	// 	}
+		
+	// 	printf("  Finish Times:\n");
+	// 	for (auto &pair : finishTimes[domainID][i])
+	// 	{
+	// 		int node = pair.first;
+	// 		uint64_t time = pair.second;
+	// 		printf("    Node %d: %lu\n", node, time);
+	// 	}
+		
+	// }
+
+	// Immediately schedule the initial node
 	int scheduledTime = currentClockCycle + 1;
-	while (scheduleNode.count(scheduledTime) > 0) scheduledTime++;
+	while (scheduleNode.count(scheduledTime) > 0)
+		scheduledTime++;
 	scheduleNode[scheduledTime] = 0;
 	scheduleDomain[scheduledTime] = domainID;
 
-	PRINT("Initializing Defence!");
+	// Debug: Print scheduling details
+	// printf("Debug: Scheduled Node and Domain Details\n");
+	// printf("  Scheduled Time: %d\n", scheduledTime);
+	// printf("  Schedule Node: %d\n", scheduleNode[scheduledTime]);
+	// printf("  Schedule Domain: %d\n", scheduleDomain[scheduledTime]);
+
+	// PRINT("Initializing Defence!");
+
+	// // Debug: Final state of all data structures
+	// printf("Debug: Final state of data structures for domainID = %d\n", domainID);
+	// printf("  numLoops: %d\n", numLoops[domainID]);
+	// printf("  currentLoop: %d\n", currentLoop[domainID]);
+	// printf("  currentLoopIteration: %d\n", currentLoopIteration[domainID]);
+	// printf("  Total Nodes: %d\n", totalNodes[domainID]);
+	// printf("  Total Fake Read Requests: %d\n", totalFakeReadRequests[domainID]);
+	// printf("  Total Fake Write Requests: %d\n", totalFakeWriteRequests[domainID]);
 }
+
+
 
 void MemoryController::stopDefence()
 {
@@ -551,7 +685,8 @@ void MemoryController::update()
 		//issue on bus and print debug
 		if (DEBUG_BUS)
 		{
-			PRINTN(" -- MC Issuing On Command Bus : ");
+			//@Ravi: Added current clock cycle to print
+			PRINTN(" -- MC Issuing On Command Bus at clock cycle " << currentClockCycle << " : ");
 			poppedBusPacket->print();
 		}
 
@@ -665,9 +800,17 @@ void MemoryController::update()
 			scheduledNode = scheduleNode[currentClockCycle];
 			scheduledDomain = scheduleDomain[currentClockCycle];
 
-                        // Determine CPU -> Security Domain Mapping
+			//@Ravi:
+			//printf("MemoryController::update: scheduledNode = %d\n", scheduledNode);
+			//printf("MemoryController::update: scheduledDomain = %d\n", scheduledDomain);
+
+            // Determine CPU -> Security Domain Mapping
 			int dataID = dataIDArr[scheduledDomain];
 			int instID = instIDArr[scheduledDomain];
+
+			//@Ravi:
+			//printf("MemoryController::update: dataID = %d\n", dataID);
+			//printf("MemoryController::update: instID = %d\n", instID);
 
 			int oldDataID = -100;
 			int oldInstID = -100;
@@ -682,6 +825,11 @@ void MemoryController::update()
                         // Determine the scheduled bank to read from
 			scheduledBank = this->dag[scheduledDomain][to_string(currentLoop[scheduledDomain])]["node"][scheduledNode]["bankID"];
 
+			//@Ravi:
+			// printf("MemoryController::update: scheduledBank = %d\n", scheduledBank);
+
+			
+
 			Transaction *transaction;
 
 			Transaction *readTransaction;
@@ -690,9 +838,23 @@ void MemoryController::update()
 			Transaction *writeTransaction;
 			int writeID = -1;
 
-                        // Check if we also need to write 
+            // Check if we also need to write 
 			int writeRequested = this->dag[scheduledDomain][to_string(currentLoop[scheduledDomain])]["node"][scheduledNode]["combinedWB"];
 			int writeBank = this->dag[scheduledDomain][to_string(currentLoop[scheduledDomain])]["node"][scheduledNode]["combinedWBBankID"];
+
+			//@Ravi:
+			//printf("MemoryController::update: writeRequested = %d\n", writeRequested);
+			//printf("MemoryController::update: writeBank = %d\n", writeBank);
+
+			//@dagstructure
+			// starting node and main node different if condition
+			if(scheduledNode == 0)
+			{
+				printf("Start Node -> scheduledNode = %d, scheduledBank = %d, writeRequested = %d, writeBank = %d\n", scheduledNode, scheduledBank, writeRequested, writeBank);
+			}
+			else{
+			printf("Main Node -> scheduledNode = %d, scheduledBank = %d, writeRequested = %d, writeBank = %d\n", scheduledNode, scheduledBank, writeRequested, writeBank);			
+			}
 			
 			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 
@@ -700,46 +862,81 @@ void MemoryController::update()
 			for (size_t i=0; i<defenceQueue.size(); i++) {
 				transaction = defenceQueue[i];
 
-                                // If this entry doesn't match our security domain requirements, skip it
-				if (transaction->securityDomain != dataID && transaction->securityDomain != instID && transaction->securityDomain != oldDataID && transaction->securityDomain != oldInstID) continue;
-                                // Calculate the address mapping
-				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
-          
-                                // If we're doing a single bank simulation, map everything to bank 0
-				if (SINGLE_BANK) newTransactionBank = 0;
+				//@Ravi:
+				//printf("MemoryController::update: defenceQueue[i]      transaction->address = %lu\n", transaction->address);
 
+                // If this entry doesn't match our security domain requirements, skip it
+				if (transaction->securityDomain != dataID && transaction->securityDomain != instID && transaction->securityDomain != oldDataID && transaction->securityDomain != oldInstID) continue;
+                
+				// Calculate the address mapping
+				addressMapping(transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
+
+				//@Ravi:
+				//printf("addressMapping: address , newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn = %lu, %d, %d, %d, %d, %d\n", transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
+				//printf("MemoryController::update: transaction-> transactionType = %d\n", transaction->transactionType);	
+                
+				// If we're doing a single bank simulation, map everything to bank 0
+				if (SINGLE_BANK) newTransactionBank = 0;
+				
 				// Did we find a matching read transaction?
 				if (transaction->transactionType == DATA_READ && readID == -1 && scheduledBank == newTransactionBank) {
 					readTransaction = transaction;
 					readID = i;
                     defenceQueue.erase(defenceQueue.begin()+readID);
                     i--;
+
+					//@Ravi:
+					//printf("Erased read transaction from defenceQueue\n");
+
+					//@dagstructure
+					printf("Enqueue real read request in global transaction -> address = %lu, Type = %d, securityDomain = %lu, arrival_time = %lu\n", transaction->address, transaction->transactionType, transaction->securityDomain, currentClockCycle);
+
 				} // Maybe a matching write transaction instead? 
 				else if (transaction->transactionType == DATA_WRITE && writeID == -1 && writeRequested && writeBank == newTransactionBank) {
 					writeTransaction = transaction;
 					writeID = i;
                 	defenceQueue.erase(defenceQueue.begin()+writeID);
                     i--;
+
+					//@Ravi:
+					//printf("Erased write transaction from defenceQueue\n");
+
+					//@dagstructure
+					printf("Enqueue real write request in global transaction -> address = %lu, Type = %d, securityDomain = %lu, arrival_time = %lu\n", transaction->address, transaction->transactionType, transaction->securityDomain, currentClockCycle);
+					//printf("Enqueue real write request in global transaction -> address = %lu, Type = %d\n", transaction->address, transaction->transactionType);
+
+
 				} // If neither, go to the next
 				else continue;
 
 				transaction->nodeID = scheduledNode;
 
+				//@Ravi:
+				//printf("MemoryController::update: transaction->nodeID = %d\n", transaction->nodeID);
+
 				if ((readID != -1) && (writeID != -1 || !writeRequested)) break;
 
 			}
 
-                        // Issue fake read request, if no matching transactions found
+            // Issue fake read request, if no matching transactions found
 			if (readID == -1) {
 				if(DEBUG_DEFENCE) PRINT("No matching read transaction, enqueuing fake request")
 
 				totalFakeReadRequests[scheduledDomain]++;
 				readTransaction = new Transaction(DATA_READ, 0, nullptr, dataID, scheduledNode, true, scheduledBank);
 				readTransaction->timeAdded = currentClockCycle;
+
+				//@Ravi:
+				//printf("MemoryController::update: readTransaction->timeAdded = currentclockcycle, totalFakeReadRequests[scheduledDomain] = %lu, %d\n", readTransaction->timeAdded, totalFakeReadRequests[scheduledDomain]);
+
+				//@dagstructure
+				printf("Enqueue fake read request in global transaction -> address = %lu, Type = %d, arrival_time = %lu\n", readTransaction->address, readTransaction->transactionType, currentClockCycle);
+				//printf("Enqueue fake read request in global transaction -> address = %lu, Type = %d\n", readTransaction->address, readTransaction->transactionType);
+
 			} 
 			transactionQueue.push_back(readTransaction);
   
-                        // If we need to issue a write request, and no matching request was found, issue one of those as well
+            // If we need to issue a write request, and no matching request was found, issue one of those as well
 			if(writeRequested) {
 				if (writeID == -1) {
 					if(DEBUG_DEFENCE) PRINT("No matching write transaction, enqueuing fake request")
@@ -747,6 +944,14 @@ void MemoryController::update()
 					totalFakeWriteRequests[scheduledDomain]++;                    
 					writeTransaction = new Transaction(DATA_WRITE, 0, nullptr, dataID, scheduledNode, true, writeBank);
 					writeTransaction->timeAdded = currentClockCycle;
+
+					//@Ravi:
+					//printf("MemoryController::update: writeTransaction->timeAdded = currentclockcycle, totalFakeWriteRequests[scheduledDomain] = %lu, %d\n", writeTransaction->timeAdded, totalFakeWriteRequests[scheduledDomain]);
+
+					//@dagstructure
+					//printf("Enqueue fake write request in global transaction -> address = %lu, Type = %d\n", writeTransaction->address, writeTransaction->transactionType);
+					printf("Enqueue fake write request in global transaction -> address = %lu, Type = %d, arrival_time = %lu\n", readTransaction->address, readTransaction->transactionType, currentClockCycle);
+
 				}
 
 				transactionQueue.push_back(writeTransaction);
@@ -756,7 +961,17 @@ void MemoryController::update()
 		}
 
 		for (size_t i=0;i<transactionQueue.size();i++)
-		{
+		{	
+			//@Ravi:
+			//printf("MemoryController::update: transactionQueue.size() = %lu\n", transactionQueue.size());
+			// want to print every elements of transactionQueue
+			// for(size_t j=0; j<transactionQueue.size(); j++) {
+			// 	Transaction *transaction = transactionQueue[j];
+			// 	printf("MemoryController::update: transactionQueue[%lu]: transaction->address = %lu\n, transaction->transactionType = %d\n, transaction->securityDomain = %lu\n, transaction->isFake = %d\n, transaction->fakeBank = %d\n, transaction->nodeID = %d\n, transaction->timeAdded = %lu\n", j, transaction->address, transaction->transactionType, transaction->securityDomain, transaction->isFake, transaction->fakeBank, transaction->nodeID, transaction->timeAdded);
+			// }
+
+
+
 			Transaction *transaction;
 			unsigned newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn;
 			//pop off top transaction from queue
@@ -764,6 +979,11 @@ void MemoryController::update()
 			//	assuming simple scheduling at the moment
 			//	will eventually add policies here
 			transaction = transactionQueue[i];
+
+			//@Ravi:
+			//printf("MemoryController::update: transaction->address = %lu\n, transaction->transactionType = %d\n, transaction->securityDomain = %lu\n, transaction->isFake = %d\n, transaction->fakeBank = %d\n, transaction->nodeID = %d\n, transaction->timeAdded = %lu\n", transaction->address, transaction->transactionType, transaction->securityDomain, transaction->isFake, transaction->fakeBank, transaction->nodeID, transaction->timeAdded);
+
+			//printf("********************************************************************\n");
 
 			//map address to rank,bank,row,col
 
@@ -773,7 +993,19 @@ void MemoryController::update()
                         // Again, map all single bank tests to bank 0, and mark fake transactions as special
                         // This is done so we don't accidentally return fake requests to the CPU!
 			if (SINGLE_BANK) newTransactionBank = 0;
-			else if (transaction->isFake) newTransactionBank = transaction->fakeBank;
+			else if (transaction->isFake) {
+				
+				newTransactionBank = transaction->fakeBank;
+			
+			//@Ravi:
+			//printf("addressMapping: address , newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn = %lu\n, %d\n, %d\n, %d\n, %d\n, %d\n", transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
+
+			}
+
+			//printf("addressMapping: address , newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn = %lu\n, %d\n, %d\n, %d\n, %d\n, %d\n", transaction->address, newTransactionChan, newTransactionRank, newTransactionBank, newTransactionRow, newTransactionColumn);
+
+
+
                         //PRINT("index " << i << " contains address" << transaction->address);
 
 			// If we have a request scheduled, try to match the bank with a transaction in the queue
@@ -823,10 +1055,16 @@ void MemoryController::update()
 				// in a bus packet, we can staple it back into a transaction and return it
 				if (transaction->transactionType == DATA_READ)
 				{
+					//@Ravi:
+					//printf("MemoryController::update: pendingReadTransactions.push_back(transaction): IF part (transaction->transactionType == DATA_READ) -> transaction->address = %lu\n, transaction->transactionType = %d\n ", transaction->address, transaction->transactionType);
+				
 					pendingReadTransactions.push_back(transaction);
 				}
 				else
 				{
+					//@Ravi:
+					//printf("MemoryController::update: pendingReadTransactions.push_back(transaction): ELSE part -> transaction->address = %lu\n, transaction->transactionType = %d\n ", transaction->address, transaction->transactionType);
+				
 					// just delete the transaction now that it's a buspacket
 					delete transaction; 
 				}
@@ -1059,7 +1297,8 @@ void MemoryController::update()
 		{
 			if (DEBUG_POWER)
 			{
-				PRINT(" ++ Adding IDD3N to total energy [from rank "<< i <<"]");
+				// @Ravi: Added currentClockCycle to the print statement
+				PRINT(" ++ Adding IDD3N to total energy [from rank "<< i <<"] and current cycle is " << currentClockCycle);
 			}
 			backgroundEnergy[i] += IDD3N * NUM_DEVICES;
 		}
@@ -1070,7 +1309,8 @@ void MemoryController::update()
 			{
 				if (DEBUG_POWER)
 				{
-					PRINT(" ++ Adding IDD2P to total energy [from rank " << i << "]");
+					// @Ravi: Added currentClockCycle to the print statement
+					PRINT(" ++ Adding IDD2P to total energy [from rank " << i << "] and current cycle is " << currentClockCycle);
 				}
 				backgroundEnergy[i] += IDD2P * NUM_DEVICES;
 			}
@@ -1078,7 +1318,8 @@ void MemoryController::update()
 			{
 				if (DEBUG_POWER)
 				{
-					PRINT(" ++ Adding IDD2N to total energy [from rank " << i << "]");
+					// @Ravi: Added currentClockCycle to the print statement
+					PRINT(" ++ Adding IDD2N to total energy [from rank " << i << "] and current cycle is " << currentClockCycle);
 				}
 				backgroundEnergy[i] += IDD2N * NUM_DEVICES;
 			}
@@ -1090,7 +1331,9 @@ void MemoryController::update()
 	{
 		if (DEBUG_BUS)
 		{
-			PRINTN(" -- MC Issuing to CPU bus : " << *returnTransaction[0]);
+			//@Ravi: Added current clock cycle to print
+			PRINTN(" -- MC Issuing to CPU bus at clock cycle " << currentClockCycle << " : " << *returnTransaction[0]);
+
 		}
 		totalTransactions++;
 
@@ -1121,7 +1364,12 @@ void MemoryController::update()
 				else if (revOldInst.count(pendingReadTransactions[i]->securityDomain)) currDomain = revOldInst[pendingReadTransactions[i]->securityDomain];
 
 				if (protection == DAG && currDomain != -1) {
-					if (DEBUG_DEFENCE) PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << "(node " << pendingReadTransactions[i]->nodeID << " at time " << dec << currentClockCycle << " in domain " << currDomain);
+
+					//@Ravi: add for printing security Domain
+					if (DEBUG_DEFENCE) PRINT("Finished Transaction " << hex << pendingReadTransactions[i]->address << "(node " << pendingReadTransactions[i]->nodeID << " at time " << dec << currentClockCycle << " in domain " << currDomain << " in security domain " << pendingReadTransactions[i]->securityDomain << ")");
+					
+					printf("Completion Time of node %d at time %lu in security domain %lu\n", pendingReadTransactions[i]->nodeID, currentClockCycle, pendingReadTransactions[i]->securityDomain);
+					printf ("****************************************************************************************************\n");
 
 					// Update phase information
 					int loopID = currentLoop[currDomain];
@@ -1166,19 +1414,140 @@ void MemoryController::update()
 							}							
 						}
 
-						if (ready) {
-							int edgeWeight = weightList[currDomain][loopID][pendingReadTransactions[i]->nodeID][child]/DEF_CLK_DIV;
+				// 		if (ready) {
+				// 			int edgeWeight = weightList[currDomain][loopID][pendingReadTransactions[i]->nodeID][child]/DEF_CLK_DIV;
+
+				// 			//@Ravi:
+				// 			printf("Edge Weight: %d\n", edgeWeight);
+				// 			printf("Current Clock Cycle: %lu\n", currentClockCycle);
+							
+				// 			int scheduledTime = edgeWeight + currentClockCycle;
+
+                //             if (scheduledTime == currentClockCycle) scheduledTime++;
+				// 			while (scheduleNode.count(scheduledTime) > 0) scheduledTime++;
+				// 			scheduleNode[scheduledTime] = child;
+				// 			scheduleDomain[scheduledTime] = currDomain;
+				// 			if (DEBUG_DEFENCE) PRINT("Issuing new node " << child << " at time" << scheduledTime);
+
+				// 		}
+				// 	}
+
+				// }
+
+
+					//@Ravi:
+						if (ready)
+						{
+							// Debug: Print ready status and current node information
+							// printf("Debug: Node is ready.\n");
+							// printf("  Current Domain: %d\n", currDomain);
+							// printf("  Loop ID: %d\n", loopID);
+							// printf("  Current Node ID: %d\n", pendingReadTransactions[i]->nodeID);
+							// printf("  Child Node ID: %d\n", child);
+							// printf(" DEF_CLK_DIV: %d\n", DEF_CLK_DIV);
+
+							// print weightList for the current node and loop
+							//	vector<vector<map<int,map<int, int>>>> weightList; //[parent][child]
+							// for(auto &[parent, childMap] : weightList[currDomain][loopID])
+							// {
+							// 	printf("  Parent Node: %d\n", parent);
+							// 	for(auto &[child, weight] : childMap)
+							// 	{
+							// 		printf("    Child Node: %d, Weight: %d\n", child, weight);
+							// 	}
+							// }
+
+							// for (auto &pair : weightList[currDomain][loopID]) {
+							// 	auto &childMap = pair.second;
+							// 	printf("  Parent Node: %d\n", pair.first);
+							// 	// for (auto &[childNode, weight] : childMap) {
+							// 	for (auto &pair : childMap) {
+							// 		auto &childNode = pair.first;
+							// 		auto &weight = pair.second;
+
+							// 		printf("    Child Node: %d, Weight: %d\n", childNode, weight);
+							// 	}
+							// }
+
+
+		// 					for (auto &[srcNode, destMap] : weightList[domainID][i])
+		// {
+		// 	for (auto &[destNode, weight] : destMap)
+		// 	{
+		// 		printf("    %d -> %d: %d\n", srcNode, destNode, weight);
+		// 	}
+		// }
+
+							
+							
+
+							// Calculate edge weight
+							int edgeWeight = weightList[currDomain][loopID][pendingReadTransactions[i]->nodeID][child] / DEF_CLK_DIV;
+
+							//Debug: Print edge weight
+							printf("  Edge Weight: %d\n", edgeWeight);
+
+							// Debug: Print current clock cycle
+							//printf("  Current Clock Cycle: %lu\n", currentClockCycle);
+
+							// Calculate scheduled time
 							int scheduledTime = edgeWeight + currentClockCycle;
 
-                            if (scheduledTime == currentClockCycle) scheduledTime++;
-							while (scheduleNode.count(scheduledTime) > 0) scheduledTime++;
+							// Ensure scheduledTime is in the future
+							if (scheduledTime == currentClockCycle)
+								scheduledTime++;
+							while (scheduleNode.count(scheduledTime) > 0)
+								scheduledTime++;
+
+							// Debug: Print the updated scheduled time
+							//printf("  Scheduled Time: %d\n", scheduledTime);
+
+							// Schedule the child node
 							scheduleNode[scheduledTime] = child;
 							scheduleDomain[scheduledTime] = currDomain;
-							if (DEBUG_DEFENCE) PRINT("Issuing new node " << child << " at time" << scheduledTime);
 
+							// Debug: Print scheduling details
+							// printf("  Scheduled Node[%d]: %d\n", scheduledTime, scheduleNode[scheduledTime]);
+							// printf("  Scheduled Domain[%d]: %d\n", scheduledTime, scheduleDomain[scheduledTime]);
+
+							// Optional: Debug printing for additional information
+							if (DEBUG_DEFENCE)
+							{
+								PRINT("Issuing new node " << child << " at time " << scheduledTime);
+							}
+
+							// Debug: Print the state of weightList for the current node and loop
+							//printf("Debug: weightList[%d][%d][%d]:\n", currDomain, loopID, pendingReadTransactions[i]->nodeID);
+							// for (auto &[destNode, weight] : weightList[currDomain][loopID][pendingReadTransactions[i]->nodeID])
+
+							// for (auto &pair : weightList[currDomain][loopID][pendingReadTransactions[i]->nodeID])
+							// {
+							// 	auto &destNode = pair.first;
+							// 	auto &weight = pair.second;
+							// 	printf("    Destination Node: %d, Weight: %d\n", destNode, weight);
+							// }
+
+							// Debug: Print the complete state of scheduleNode and scheduleDomain
+							// printf("Debug: scheduleNode contents:\n");
+							// // for (auto &[time, node] : scheduleNode)
+							// for (auto &pair : scheduleNode)
+							// {
+							// 	auto &time = pair.first;
+							// 	auto &node = pair.second;
+							// 	printf("  Time: %lu, Node: %d\n", time, node);
+							// }
+							
+							// printf("Debug: scheduleDomain contents:\n");
+							// // for (auto &[time, domain] : scheduleDomain)
+							// for (auto &pair : scheduleDomain)
+							// {
+							// 	auto &time = pair.first;
+							// 	auto &domain = pair.second;
+							// 	printf("  Time: %lu, Domain: %d\n", time, domain);
+							// }
+							
 						}
 					}
-
 				}
 
 				delete pendingReadTransactions[i];
@@ -1212,7 +1581,9 @@ void MemoryController::update()
 		PRINT("== Printing transaction queue");
 		for (size_t i=0;i<transactionQueue.size();i++)
 		{
+			// @Ravi: Added currentClockCycle to the print statement
 			PRINTN("  " << i << "] "<< *transactionQueue[i]);
+			PRINT(" and current cycle is " << currentClockCycle);
 		}
 	}
 
@@ -1244,7 +1615,12 @@ void MemoryController::update()
 				{
 					PRINTN("[lowp] ");
 				}
+
 			}
+
+			//@Ravi: Added currentClockCycle to the print statement
+			PRINT("  and current cycle is " << currentClockCycle);
+
 			PRINT(""); // effectively just cout<<endl;
 		}
 	}
@@ -1271,10 +1647,28 @@ bool MemoryController::WillAcceptDefenceTransaction()
 //allows outside source to make request of memory system
 bool MemoryController::addTransaction(Transaction *trans)
 {
+	//@Ravi:
+	printf("MemoryController::New Transaction Address: %lu, Clock: %lu, Domain: %lu, isWrite? %d Current Cycle: %lu\n", trans->address, currentClockCycle, trans->securityDomain, trans->transactionType == DATA_WRITE, currentClockCycle);
+
 	if (DEBUG_DEFENCE) PRINT("NEWTRANS: Addr: " << std::hex << trans->address << " Clk: " << std::dec << currentClockCycle << " Domain: " << trans->securityDomain << " isWrite? " << (trans->transactionType == DATA_WRITE) << " Current Cycle: " << currentClockCycle);
+
+	//@Ravi:
+	// printf("revData: %zu, revInst: %zu\n", revData.count(trans->securityDomain), revInst.count(trans->securityDomain));
 
 	if (protection == DAG && (revData.count(trans->securityDomain) || revInst.count(trans->securityDomain))) {
     	        if (DEBUG_DEFENCE) PRINT("PUSHED!")
+	//@Ravi:
+	printf("******* Pushed to defence queue\n");
+	// printf("revData: %zu, revInst: %zu\n", revData.count(trans->securityDomain), revInst.count(trans->securityDomain));
+
+	// revData is map<<int, int>>, revInst is map<<int, int>> printed.
+	// for (auto& x : revData) {
+	// 	std::cout << x.first << ": " << x.second << std::endl;
+	// }
+	// for (auto& x : revInst) {
+	// 	std::cout << x.first << ": " << x.second << std::endl;
+	// }
+
 		defenceQueue.push_back(trans);
 		return true;
 	}
@@ -1282,6 +1676,12 @@ bool MemoryController::addTransaction(Transaction *trans)
 	if (WillAcceptTransaction())
 	{
 		trans->timeAdded = currentClockCycle;
+
+		//@Ravi:
+		printf("+++++ Pushed to transaction queue\n");
+
+		printf("trans->timeAdded  ...... %lu\n", trans->timeAdded);
+
 		transactionQueue.push_back(trans);
 		return true;
 	}

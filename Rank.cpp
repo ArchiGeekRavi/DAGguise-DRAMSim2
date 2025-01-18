@@ -83,7 +83,8 @@ void Rank::receiveFromBus(BusPacket *packet)
 {
 	if (DEBUG_BUS)
 	{
-		PRINTN(" -- R" << this->id << " Receiving On Bus    : ");
+		//@Ravi: Added currentClockCycle at print
+		PRINTN(" -- R" << this->id << " Receiving On Bus at cycle " << currentClockCycle << " : ");
 		packet->print();
 	}
 	if (VERIFICATION_OUTPUT)
@@ -333,7 +334,8 @@ void Rank::update()
 
 		if (DEBUG_BUS)
 		{
-			PRINTN(" -- R" << this->id << " Issuing On Data Bus : ");
+			//@Ravi: Added currentClockCycle at print
+			PRINTN(" -- R" << this->id << " Issuing On Data Bus at cycle " << currentClockCycle << " : ");
 			outgoingDataPacket->print();
 			PRINT("");
 		}
